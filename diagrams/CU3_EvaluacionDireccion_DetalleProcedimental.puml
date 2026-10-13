@@ -1,0 +1,107 @@
+@startuml
+allowmixing
+hide empty members
+title CU3 - Gestion de la Evaluacion de Solicitud por Direccion de Carrera (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - enviar: SendEmail
+  - tf_subject: JTextField
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + evaluacion(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::EvaluacionSolicitud" as EvaluacionSolicitud {
+  - id: int
+  - idSolicitud: int
+  - idEvaluador: int
+  - decision: String
+  - justificacion: String
+  - observaciones: String
+  - fechaEvaluacion: Timestamp
+}
+
+class "Models::Solicitud" as Solicitud {
+  - id: int
+  - codigo: String
+  - estado: String
+  - fechaRevision: Timestamp
+  - idRevisor: Integer
+  - motivoRechazo: String
+}
+
+class "Services::EvaluacionService" as EvaluacionService {
+  - evaluacionDAO: EvaluacionSolicitudDAO
+  - solicitudDAO: SolicitudDAO
+  - historialDAO: HistorialSolicitudDAO
+  - notificacionDAO: NotificacionDAO
+  + evaluarSolicitud(params: List<String>, remitenteEmail: String): void
+  + listarEvaluaciones(): List<String[]>
+  + getComandosEvaluacion(): String
+}
+
+class "DAO::EvaluacionSolicitudDAO" as EvaluacionSolicitudDAO {
+  - con: Connection
+  + create(ev: EvaluacionSolicitud): void
+  + listAll(): List<String[]>
+}
+
+class "DAO::SolicitudDAO" as SolicitudDAO {
+  - con: Connection
+  + updateEstado(id: int, estado: String, idRevisor: Integer, obs: String, rechazo: String): void
+  + getEstado(id: int): String
+}
+
+class "DAO::HistorialSolicitudDAO" as HistorialSolicitudDAO {
+  + create(hist: HistorialSolicitud): void
+}
+
+class "DAO::NotificacionDAO" as NotificacionDAO {
+  + create(notif: Notificacion): void
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of EvaluacionService
+  La Direccion de Carrera resuelve:
+  - APROBADA -> APROBADA_DIRECCION
+  - RECHAZADA -> RECHAZADA_DIRECCION (con justificacion)
+  - OBSERVADA -> OBSERVADA
+  Notifica formalmente al estudiante.
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener evaluacion(TokenEvent)
+Home --> EvaluacionService : evaluacion(event)
+EvaluacionService --> EvaluacionSolicitudDAO : evaluacionDAO
+EvaluacionService --> SolicitudDAO : solicitudDAO
+EvaluacionService --> HistorialSolicitudDAO : historialDAO
+EvaluacionService --> NotificacionDAO : notificacionDAO
+EvaluacionSolicitudDAO --> EvaluacionSolicitud : mapea
+SolicitudDAO --> Solicitud : actualiza estado
+EvaluacionSolicitudDAO --> Conexion : getInstancia().EstablecerConexion()
+SolicitudDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml

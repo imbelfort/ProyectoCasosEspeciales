@@ -1,0 +1,102 @@
+@startuml
+allowmixing
+hide empty members
+title CU5 - Gestion del Procesamiento y Remision de Casos Especiales a CPD (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + oficioCpd(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::OficioCpd" as OficioCpd {
+  - id: int
+  - numeroOficio: String
+  - idSolicitud: int
+  - destinatario: String
+  - referencia: String
+  - detalle: String
+  - idResponsableRemision: int
+  - fechaRemision: Timestamp
+  - estado: String
+}
+
+class "Models::Solicitud" as Solicitud {
+  - id: int
+  - codigo: String
+  - estado: String
+}
+
+class "Services::OficioCpdService" as OficioCpdService {
+  - oficioDAO: OficioCpdDAO
+  - solicitudDAO: SolicitudDAO
+  - historialDAO: HistorialSolicitudDAO
+  - notificacionDAO: NotificacionDAO
+  + remitirACpd(params: List<String>, remitenteEmail: String): void
+  + listarOficios(): List<String[]>
+  + getComandosOficio(): String
+}
+
+class "DAO::OficioCpdDAO" as OficioCpdDAO {
+  - con: Connection
+  + create(of: OficioCpd): void
+  + listAll(): List<String[]>
+}
+
+class "DAO::SolicitudDAO" as SolicitudDAO {
+  - con: Connection
+  + updateEstado(id: int, nuevoEstado: String, ...): void
+}
+
+class "DAO::HistorialSolicitudDAO" as HistorialSolicitudDAO {
+  + create(hist: HistorialSolicitud): void
+}
+
+class "DAO::NotificacionDAO" as NotificacionDAO {
+  + create(notif: Notificacion): void
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of OficioCpdService
+  Prepara el expediente institucional con
+  numero de oficio (OF-CPD-2026-XXXX),
+  actualiza solicitud a REMITIDA_A_CPD
+  y remite notificacion oficial a CPD.
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener oficioCpd(TokenEvent)
+Home --> OficioCpdService : oficioCpd(event)
+OficioCpdService --> OficioCpdDAO : oficioDAO
+OficioCpdService --> SolicitudDAO : solicitudDAO
+OficioCpdService --> HistorialSolicitudDAO : historialDAO
+OficioCpdService --> NotificacionDAO : notificacionDAO
+OficioCpdDAO --> OficioCpd : mapea
+SolicitudDAO --> Solicitud : actualiza a REMITIDA_A_CPD
+OficioCpdDAO --> Conexion : getInstancia().EstablecerConexion()
+SolicitudDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml

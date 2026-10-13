@@ -1,0 +1,105 @@
+@startuml
+allowmixing
+hide empty members
+title CU7 - Gestion de Historial y Trazabilidad (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + historial(TokenEvent): void
+  + notificacion(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::HistorialSolicitud" as HistorialSolicitud {
+  - id: int
+  - idSolicitud: int
+  - idUsuario: Integer
+  - estadoAnterior: String
+  - estadoNuevo: String
+  - accion: String
+  - observacion: String
+  - fechaEvento: Timestamp
+}
+
+class "Models::Notificacion" as Notificacion {
+  - id: int
+  - idUsuario: Integer
+  - idSolicitud: Integer
+  - destinatario: String
+  - tipo: String
+  - asunto: String
+  - mensaje: String
+  - canal: String
+  - estado: String
+  - fechaEnvio: Timestamp
+}
+
+class "Services::HistorialService" as HistorialService {
+  - dao: HistorialSolicitudDAO
+  + consultarHistorialSolicitud(idSolicitud: int): List<String[]>
+  + listarTodoElHistorial(): List<String[]>
+  + getComandosHistorial(): String
+}
+
+class "Services::NotificacionService" as NotificacionService {
+  - dao: NotificacionDAO
+  + listarNotificaciones(): List<String[]>
+  + getComandosNotificacion(): String
+}
+
+class "DAO::HistorialSolicitudDAO" as HistorialSolicitudDAO {
+  - con: Connection
+  + create(hist: HistorialSolicitud): void
+  + listBySolicitud(idSolicitud: int): List<String[]>
+  + listAll(): List<String[]>
+}
+
+class "DAO::NotificacionDAO" as NotificacionDAO {
+  - con: Connection
+  + create(n: Notificacion): void
+  + listAll(): List<String[]>
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of HistorialService
+  Garantiza inmutabilidad y trazabilidad
+  de todas las operaciones: quien envio,
+  quien evaluo, quien reservo cupo, quien
+  remitio a CPD y quien habilito el caso.
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener historial, notificacion(TokenEvent)
+Home --> HistorialService : historial(event)
+Home --> NotificacionService : notificacion(event)
+HistorialService --> HistorialSolicitudDAO : dao
+NotificacionService --> NotificacionDAO : dao
+HistorialSolicitudDAO --> HistorialSolicitud : mapea
+NotificacionDAO --> Notificacion : mapea
+HistorialSolicitudDAO --> Conexion : getInstancia().EstablecerConexion()
+NotificacionDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml

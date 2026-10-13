@@ -1,0 +1,105 @@
+@startuml
+allowmixing
+hide empty members
+title CU6 - Gestion del Registro de Confirmacion y Habilitacion de CPD (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + respuestaCpd(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::OficioRespuestaCpd" as OficioRespuestaCpd {
+  - id: int
+  - idOficio: int
+  - idSolicitud: int
+  - codigoRespuesta: String
+  - resultado: String
+  - observaciones: String
+  - referenciaRespaldo: String
+  - fechaRespuesta: Timestamp
+  - fechaHabilitacionEfectiva: Timestamp
+  - idResponsableCpd: Integer
+  - estado: String
+}
+
+class "Models::Solicitud" as Solicitud {
+  - id: int
+  - estado: String
+}
+
+class "Services::RespuestaCpdService" as RespuestaCpdService {
+  - respuestaDAO: OficioRespuestaCpdDAO
+  - solicitudDAO: SolicitudDAO
+  - historialDAO: HistorialSolicitudDAO
+  - notificacionDAO: NotificacionDAO
+  + registrarRespuestaCpd(params: List<String>, remitenteEmail: String): void
+  + listarRespuestas(): List<String[]>
+  + getComandosRespuesta(): String
+}
+
+class "DAO::OficioRespuestaCpdDAO" as OficioRespuestaCpdDAO {
+  - con: Connection
+  + create(resp: OficioRespuestaCpd): void
+  + listAll(): List<String[]>
+}
+
+class "DAO::SolicitudDAO" as SolicitudDAO {
+  - con: Connection
+  + updateEstado(id: int, estado: String, ...): void
+}
+
+class "DAO::HistorialSolicitudDAO" as HistorialSolicitudDAO {
+  + create(hist: HistorialSolicitud): void
+}
+
+class "DAO::NotificacionDAO" as NotificacionDAO {
+  + create(notif: Notificacion): void
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of RespuestaCpdService
+  Registra la respuesta de CPD:
+  - HABILITADA (con fecha de habilitacion efectiva)
+  - CONFIRMADA_CPD
+  - OBSERVADA_CPD
+  - RECHAZADA_CPD
+  Guarda referencia de respaldo y notifica al estudiante.
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener respuestaCpd(TokenEvent)
+Home --> RespuestaCpdService : respuestaCpd(event)
+RespuestaCpdService --> OficioRespuestaCpdDAO : respuestaDAO
+RespuestaCpdService --> SolicitudDAO : solicitudDAO
+RespuestaCpdService --> HistorialSolicitudDAO : historialDAO
+RespuestaCpdService --> NotificacionDAO : notificacionDAO
+OficioRespuestaCpdDAO --> OficioRespuestaCpd : mapea
+SolicitudDAO --> Solicitud : actualiza estado
+OficioRespuestaCpdDAO --> Conexion : getInstancia().EstablecerConexion()
+SolicitudDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml

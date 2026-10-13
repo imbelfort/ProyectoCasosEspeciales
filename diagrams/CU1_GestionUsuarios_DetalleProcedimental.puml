@@ -1,0 +1,150 @@
+@startuml
+allowmixing
+hide empty members
+title CU1 - Gestion de Usuarios, Roles y Fotos (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - enviar: SendEmail
+  - jButton1: JButton
+  - tf_mailfrom: JTextField
+  - tf_rcptto: JTextField
+  - tf_subject: JTextField
+  - ta_respuesta: JEditorPane
+  + Principal()
+  + initComponents(): void
+  + jMenuItemIniciarActionPerformed(evt): void
+  + jButton1ActionPerformed(evt): void
+  + main(args): void
+}
+
+interface IEmailEventListener {
+  + onReceiveEmailEvent(List<Email>): void
+}
+
+interface ITokenCasoUsoEventListener {
+  + usuario(TokenEvent): void
+  + rol(TokenEvent): void
+  + estudiante(TokenEvent): void
+  + personalCarrera(TokenEvent): void
+  + directorCarrera(TokenEvent): void
+  + carrera(TokenEvent): void
+  + periodo(TokenEvent): void
+  + materia(TokenEvent): void
+  + grupo(TokenEvent): void
+  + solicitud(TokenEvent): void
+  + evaluacion(TokenEvent): void
+  + bloqueoGrupo(TokenEvent): void
+  + oficioCpd(TokenEvent): void
+  + respuestaCpd(TokenEvent): void
+  + historial(TokenEvent): void
+  + reporte(TokenEvent): void
+  + error(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + iniciar(): void
+  + onReceiveEmailEvent(List<Email>): void
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::Usuario" as Usuario {
+  - idUsuario: int
+  - nombre: String
+  - apellidos: String
+  - ci: String
+  - email: String
+  - telefono: String
+  - direccion: String
+  - fotoPerfil: String
+  - usuarioSistema: String
+  - contrasena: String
+  - estado: String
+  - fechaNacimiento: Date
+  - fechaCreacion: Timestamp
+  - fechaModificacion: Timestamp
+}
+
+class "Models::Rol" as Rol {
+  - id: int
+  - nombre: String
+  - descripcion: String
+  - estado: String
+}
+
+class "Services::UsuarioService" as UsuarioService {
+  - usuarioDAO: UsuarioDAO
+  + crearUsuario(params: List<String>, fotoPerfil: String): void
+  + obtenerUsuarioPorId(id: int): String[]
+  + listarUsuarios(): List<String[]>
+  + actualizarUsuario(params: List<String>, fotoPerfil: String): void
+  + eliminarUsuario(id: int): void
+  + getComandosUsuario(): String
+}
+
+class "Services::RolService" as RolService {
+  - rolDAO: RolDAO
+  + crearRol(params: List<String>): void
+  + listarRoles(): List<String[]>
+  + asignarRol(params: List<String>): void
+  + getComandosRol(): String
+}
+
+class "DAO::UsuarioDAO" as UsuarioDAO {
+  - con: Connection
+  + create(usuario: Usuario): void
+  + readById(id: int): String[]
+  + listAll(): List<String[]>
+  + update(usuario: Usuario): void
+  + delete(id: int): void
+  + existsByCi(ci: String): boolean
+  + existsByEmail(email: String): boolean
+}
+
+class "DAO::RolDAO" as RolDAO {
+  - con: Connection
+  + create(rol: Rol): void
+  + listAll(): List<String[]>
+  + asignarRolUsuario(idUsuario: int, idRol: int): void
+}
+
+class "Database::Conexion" as Conexion {
+  - instancia: Conexion
+  - con: Connection
+  + EstablecerConexion(): Connection
+  + CerrarConexion(): void
+  + getInstancia(): Conexion
+}
+
+note right of UsuarioService
+  Valida formatos obligatorios,
+  uniciad de CI y correo institucional.
+  Almacena fotos en Base64 o ruta.
+end note
+
+Principal --> Home : -iniciar
+Home ..> IEmailEventListener : setEmailEventListener(...)
+Home ..> ITokenCasoUsoEventListener : listener usuario(TokenEvent)
+Home --> UsuarioService : usuario(event)
+Home --> RolService : rol(event)
+UsuarioService --> UsuarioDAO : usuarioDAO
+RolService --> RolDAO : rolDAO
+UsuarioDAO --> Usuario : mapea
+RolDAO --> Rol : mapea
+UsuarioDAO --> Conexion : getInstancia().EstablecerConexion()
+RolDAO --> Conexion : getInstancia().EstablecerConexion()
+Principal ..> ITokenCasoUsoEventListener
+
+@enduml

@@ -1,0 +1,78 @@
+@startuml
+allowmixing
+hide empty members
+title CU8 - Reportes y Estadisticas Consolidadas (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + reporte(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::Reporte" as Reporte {
+  - id: int
+  - idUsuario: int
+  - tipoReporte: String
+  - parametros: String
+  - fechaGeneracion: Timestamp
+}
+
+class "Services::ReporteService" as ReporteService {
+  - reporteDAO: ReporteDAO
+  + reporteGeneral(): List<String[]>
+  + reporteEstados(): List<String[]>
+  + reportePeriodos(): List<String[]>
+  + reporteCupos(): List<String[]>
+  + registrarAuditoriaReporte(idUsuario: int, tipo: String, params: String): void
+  + getComandosReporte(): String
+}
+
+class "DAO::ReporteDAO" as ReporteDAO {
+  - con: Connection
+  + reporteGeneral(): List<String[]>
+  + reportePorEstado(): List<String[]>
+  + reportePorPeriodo(): List<String[]>
+  + reporteCupos(): List<String[]>
+  + registrarReporte(idUsuario: int, tipo: String, params: String): void
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of ReporteService
+  Genera indicadores consolidados oficiales:
+  - Total y pendientes de evaluacion / remision
+  - Distribucion y porcentajes por estado
+  - Ocupacion, disponibilidad y reservas de cupos
+  - Solicitudes por gestion y carrera
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener reporte(TokenEvent)
+Home --> ReporteService : reporte(event)
+ReporteService --> ReporteDAO : reporteDAO
+ReporteDAO --> Reporte : audita generacion
+ReporteDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml

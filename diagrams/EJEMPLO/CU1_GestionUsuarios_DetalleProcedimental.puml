@@ -1,0 +1,96 @@
+@startuml
+allowmixing
+hide empty members
+title CU1 - Gestion de Usuarios (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - enviar: SendEmail
+  - jButton1: JButton
+  - tf_mailfrom: JTextField
+  - tf_rcptto: JTextField
+  - tf_subject: JTextField
+  - ta_respuesta: JEditorPane
+  + Principal()
+  + initComponents(): void
+  + jMenuItemIniciarActionPerformed(evt): void
+  + jButton1ActionPerformed(evt): void
+  + main(args): void
+}
+
+interface IEmailEventListener {
+  + onReceiveEmailEvent(List<Email>): void
+}
+
+interface ITokenCasoUsoEventListener {
+  + usuario(TokenEvent): void
+  + categoria(TokenEvent): void
+  + vendedor(TokenEvent): void
+  + producto(TokenEvent): void
+  + propietario(TokenEvent): void
+  + cliente(TokenEvent): void
+  + pedido(TokenEvent): void
+  + pedidoDetalle(TokenEvent): void
+  + venta(TokenEvent): void
+  + credito(TokenEvent): void
+  + pago(TokenEvent): void
+  + promocion(TokenEvent): void
+  + promocionProducto(TokenEvent): void
+  + reporte(TokenEvent): void
+  + error(TokenEvent): void
+  + posibleserrores(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + iniciar(): void
+  + onReceiveEmailEvent(List<Email>): void
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Services::UsuarioService" as UsuarioService {
+  - usuarioDAO: UsuarioDAO
+  + crearUsuario(params: List<String>): void
+  + obtenerUsuarioPorId(id: int): String[]
+  + listarUsuarios(): List<String[]>
+  + actualizarUsuario(params: List<String>): void
+  + eliminarUsuario(id: int): void
+  + getComandosUsuario(): String
+}
+
+class "DAO::UsuarioDAO" as UsuarioDAO {
+  - con: Connection
+  + create(usuario: Usuario): void
+  + readById(id: int): String[]
+  + listAll(): List<String[]>
+  + update(usuario: Usuario): void
+  + delete(id: int): void
+}
+
+class "Database::Conexion" as Conexion {
+  - instancia: Conexion
+  - con: Connection
+  + EstablecerConexion(): Connection
+  + CerrarConexion(): void
+  + getInstancia(): Conexion
+}
+Principal --> Home : -iniciar
+Home ..> IEmailEventListener : setEmailEventListener(...)
+Home ..> ITokenCasoUsoEventListener : listener usuario(TokenEvent)
+Home --> UsuarioService : usuario(event)
+UsuarioService --> UsuarioDAO : usuarioDAO
+UsuarioDAO --> Conexion : getInstancia().EstablecerConexion()
+Principal ..> ITokenCasoUsoEventListener
+
+@enduml

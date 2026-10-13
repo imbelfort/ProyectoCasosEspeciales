@@ -1,0 +1,117 @@
+@startuml
+allowmixing
+hide empty members
+title CU4 - Gestion del Bloqueo y Control de Cupos de Materias/Paralelos (Detalle Procedimental)
+
+skinparam backgroundColor #101318
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #BFC7D5
+skinparam classBorderColor #D6D9E0
+skinparam classFontColor #0F172A
+skinparam classBackgroundColor #FFF8E7
+skinparam noteBackgroundColor #FFFCEB
+skinparam noteBorderColor #C5A880
+skinparam classAttributeIconSize 0
+
+class "proyectomailgrupo02sa::Principal" as Principal <<JFrame>> {
+  - iniciar: Home
+  - ta_respuesta: JEditorPane
+}
+
+interface ITokenCasoUsoEventListener {
+  + materia(TokenEvent): void
+  + grupo(TokenEvent): void
+  + bloqueoGrupo(TokenEvent): void
+}
+
+class "Comunication::Home" as Home {
+  + interprete(email: Email): void
+  + mostraRespuesta(textoHtml): void
+}
+
+class "Models::Grupo" as Grupo {
+  - id: int
+  - idMateria: int
+  - idPeriodo: int
+  - siglaGrupo: String
+  - docente: String
+  - cupoMaximo: int
+  - cuposDisponibles: int
+  - cupoExcepcionalMaximo: int
+  - estado: String
+}
+
+class "Models::BloqueoGrupo" as BloqueoGrupo {
+  - id: int
+  - idGrupo: int
+  - idSolicitud: Integer
+  - cantidad: int
+  - motivo: String
+  - estado: String
+  - autorizadoPor: Integer
+  - fechaBloqueo: Timestamp
+  - fechaResolucion: Timestamp
+  - observacion: String
+}
+
+class "Services::GrupoService" as GrupoService {
+  - dao: GrupoDAO
+  + crearGrupo(params: List<String>): void
+  + listarGrupos(): List<String[]>
+  + consultarCupo(idGrupo: int): String[]
+  + getComandosGrupo(): String
+}
+
+class "Services::BloqueoGrupoService" as BloqueoGrupoService {
+  - bloqueoDAO: BloqueoGrupoDAO
+  - grupoDAO: GrupoDAO
+  - historialDAO: HistorialSolicitudDAO
+  + bloquearCupo(params: List<String>): void
+  + liberarCupo(params: List<String>): void
+  + listarBloqueos(): List<String[]>
+  + getComandosBloqueo(): String
+}
+
+class "DAO::GrupoDAO" as GrupoDAO {
+  - con: Connection
+  + create(grupo: Grupo): void
+  + listAll(): List<String[]>
+  + descontarCupo(idGrupo: int, cantidad: int): boolean
+  + liberarCupo(idGrupo: int, cantidad: int): void
+  + readById(idGrupo: int): String[]
+}
+
+class "DAO::BloqueoGrupoDAO" as BloqueoGrupoDAO {
+  - con: Connection
+  + create(bg: BloqueoGrupo): void
+  + listAll(): List<String[]>
+  + liberarBloqueo(idBloqueo: int, obs: String): void
+  + readById(idBloqueo: int): BloqueoGrupo
+}
+
+class "Database::Conexion" as Conexion {
+  + EstablecerConexion(): Connection
+  + getInstancia(): Conexion
+}
+
+note right of BloqueoGrupoService
+  Controla transaccionalmente la disponibilidad.
+  Al bloquear, descuenta cupos_disponibles.
+  Al liberar o rechazar, reintegra cupos
+  y actualiza la resolucion del bloqueo.
+end note
+
+Principal --> Home : -iniciar
+Home ..> ITokenCasoUsoEventListener : listener grupo, bloqueoGrupo(TokenEvent)
+Home --> GrupoService : grupo(event)
+Home --> BloqueoGrupoService : bloqueoGrupo(event)
+GrupoService --> GrupoDAO : dao
+BloqueoGrupoService --> BloqueoGrupoDAO : bloqueoDAO
+BloqueoGrupoService --> GrupoDAO : grupoDAO
+GrupoDAO --> Grupo : mapea
+BloqueoGrupoDAO --> BloqueoGrupo : mapea
+GrupoDAO --> Conexion : getInstancia().EstablecerConexion()
+BloqueoGrupoDAO --> Conexion : getInstancia().EstablecerConexion()
+
+@enduml
