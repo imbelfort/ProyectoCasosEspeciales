@@ -169,50 +169,50 @@ public class MailVerificationThread implements Runnable {
     }
 
     private void mostrarDashboardServidores() {
-        String smtpColor = lastSmtpStatus != null && lastSmtpStatus ? "#2e7d32" : "#c62828";
-        String imapColor = lastImapStatus != null && lastImapStatus ? "#2e7d32" : "#c62828";
-        String pop3Color = lastPopStatus != null && lastPopStatus ? "#2e7d32" : "#c62828";
+        String smtpBadge = lastSmtpStatus != null && lastSmtpStatus
+                ? "<span style='background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10003; ACTIVO</span>"
+                : "<span style='background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10007; INACTIVO</span>";
 
-        String smtpStatus = lastSmtpStatus != null && lastSmtpStatus ? "ACTIVO" : "INACTIVO";
-        String imapStatus = lastImapStatus != null && lastImapStatus ? "ACTIVO" : "INACTIVO";
-        String pop3Status = lastPopStatus != null && lastPopStatus ? "ACTIVO" : "INACTIVO";
+        String imapBadge = lastImapStatus != null && lastImapStatus
+                ? "<span style='background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10003; ACTIVO</span>"
+                : "<span style='background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10007; INACTIVO</span>";
 
-        String html = "<html><body style='font-family: Arial; padding: 15px; background-color: #f5f5f5;'>" +
-                "<h2 style='text-align: center; color: #1a1a1a; margin: 0 0 20px 0;'>ESTADO DE SERVIDORES DE CORREO</h2>" +
-                "<table style='width: 100%; border-collapse: collapse; margin-bottom: 15px;'>" +
-                "<tr style='background-color: #6A1B9A;'>" +
-                "<th style='color: white; padding: 10px; border: 1px solid #4A148C; text-align: left;'>Protocolo</th>" +
-                "<th style='color: white; padding: 10px; border: 1px solid #4A148C; text-align: left;'>Host</th>" +
-                "<th style='color: white; padding: 10px; border: 1px solid #4A148C; text-align: left;'>Puerto</th>" +
-                "<th style='color: white; padding: 10px; border: 1px solid #4A148C; text-align: center;'>Estado</th>" +
-                "</tr>" +
+        String pop3Badge = lastPopStatus != null && lastPopStatus
+                ? "<span style='background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10003; ACTIVO</span>"
+                : "<span style='background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px;'>&#10007; INACTIVO</span>";
 
-                "<tr>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>SMTP</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + HOST + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + PORT_SMTP + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd; text-align: center; background-color: " + smtpColor + "; color: white; font-weight: bold;'>" + smtpStatus + "</td>" +
-                "</tr>" +
-
-                "<tr>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>IMAP</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + HOST + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + PORT_IMAP + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd; text-align: center; background-color: " + imapColor + "; color: white; font-weight: bold;'>" + imapStatus + "</td>" +
-                "</tr>" +
-
-                "<tr>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>POP3</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + HOST + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd;'>" + PORT_POP + "</td>" +
-                "<td style='padding: 10px; border: 1px solid #ddd; text-align: center; background-color: " + pop3Color + "; color: white; font-weight: bold;'>" + pop3Status + "</td>" +
-                "</tr>" +
-
-                "</table>" +
-                "<p style='font-size: 12px; color: #666; margin: 0;'>Monitoreando estado cada 5 segundos...</p>" +
-                "</body></html>";
+        String html = "<!DOCTYPE html><html>" +
+                "<head><meta charset='UTF-8'></head>" +
+                "<body style='font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; padding: 18px; background-color: #f1f5f9; margin: 0;'>" +
+                "<div style='max-width: 700px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(15,23,42,0.08); border: 1px solid #e2e8f0;'>" +
+                "<div style='background: #0f172a; background-image: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%); padding: 18px 22px; border-bottom: 3px solid #2563eb;'>" +
+                "<span style='background: rgba(255,255,255,0.12); color: #93c5fd; font-size: 10px; font-weight: bold; letter-spacing: 1.5px; padding: 3px 8px; border-radius: 10px; text-transform: uppercase;'>MONITOREO DE RED</span>" +
+                "<h2 style='color: #ffffff; margin: 6px 0 0 0; font-size: 17px; font-weight: 700;'>ESTADO DE SERVIDORES DE CORREO</h2>" +
+                "</div>" +
+                "<div style='padding: 20px 22px;'>" +
+                "<div style='overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 14px;'>" +
+                "<table style='width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;'>" +
+                "<thead><tr style='background-color: #0f172a; color: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;'>" +
+                "<th style='padding: 10px 14px;'>Protocolo</th>" +
+                "<th style='padding: 10px 14px;'>Host</th>" +
+                "<th style='padding: 10px 14px;'>Puerto</th>" +
+                "<th style='padding: 10px 14px; text-align: center;'>Estado del Servicio</th>" +
+                "</tr></thead>" +
+                "<tbody>" +
+                "<tr style='border-top: 1px solid #f1f5f9;'><td style='padding: 10px 14px; font-weight: bold; color: #0f172a;'>SMTP (Envío)</td><td style='padding: 10px 14px; color: #475569;'>" + HOST + "</td><td style='padding: 10px 14px; font-family: Consolas, monospace;'>" + PORT_SMTP + "</td><td style='padding: 10px 14px; text-align: center;'>" + smtpBadge + "</td></tr>" +
+                "<tr style='border-top: 1px solid #f1f5f9; background-color: #f8fafc;'><td style='padding: 10px 14px; font-weight: bold; color: #0f172a;'>IMAP (Lectura)</td><td style='padding: 10px 14px; color: #475569;'>" + HOST + "</td><td style='padding: 10px 14px; font-family: Consolas, monospace;'>" + PORT_IMAP + "</td><td style='padding: 10px 14px; text-align: center;'>" + imapBadge + "</td></tr>" +
+                "<tr style='border-top: 1px solid #f1f5f9;'><td style='padding: 10px 14px; font-weight: bold; color: #0f172a;'>POP3 (Recepción)</td><td style='padding: 10px 14px; color: #475569;'>" + HOST + "</td><td style='padding: 10px 14px; font-family: Consolas, monospace;'>" + PORT_POP + "</td><td style='padding: 10px 14px; text-align: center;'>" + popBadge(pop3Badge) + "</td></tr>" +
+                "</tbody></table>" +
+                "</div>" +
+                "<p style='font-size: 11px; color: #94a3b8; margin: 0; text-align: right;'>Ciclo de monitoreo automático activo cada 5 segundos.</p>" +
+                "</div>" +
+                "</div></body></html>";
 
         Home.mostraRespuesta(html);
+    }
+
+    private String popBadge(String badge) {
+        return badge;
     }
 
     private void authUser(String email, String password) throws IOException {

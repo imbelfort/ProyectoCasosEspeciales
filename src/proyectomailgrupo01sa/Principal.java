@@ -199,43 +199,28 @@ public class Principal extends javax.swing.JFrame {
         String subject = tf_subject.getText().trim();
 
         if (mailfrom.isEmpty() || rcptto.isEmpty() || subject.isEmpty()) {
-            String errorMsg =
-                    "<html><body style='font-family: Arial; padding: 20px;'>" +
-                    "<h2 style='color: #d9534f;'>Error</h2>" +
-                    "<p style='font-size: 14px;'>Por favor complete todos los campos:</p>" +
-                    "<ul>" +
-                    "<li><b>MAIL FROM:</b> Correo del remitente</li>" +
-                    "<li><b>RCPT TO:</b> Correo del destinatario</li>" +
-                    "<li><b>SUBJECT:</b> Comando o asunto. Ejemplo: usuario listar, help, solicitud listar</li>" +
-                    "</ul></body></html>";
-
+            String errorMsg = Comunication.HtmlBuilder.generarMensajeErrorDetallado(
+                    "Campos Incompletos en el Panel",
+                    subject,
+                    "Debe completar todos los campos requeridos (MAIL FROM, RCPT TO y SUBJECT) para simular el envío.",
+                    "Ingrese su correo en MAIL FROM, el correo del servidor en RCPT TO y un comando como 'solicitud listar' en SUBJECT."
+            );
             Home.mostraRespuesta(errorMsg);
             return;
         }
 
-        String processingMsg =
-                "<html><body style='font-family: Arial; padding: 20px;'>" +
-                "<h2 style='color: #5bc0de;'>Procesando comando...</h2>" +
-                "<p><b>Comando:</b> " + subject + "</p>" +
-                "<p><b>De:</b> " + mailfrom + "</p>" +
-                "<p><b>Para:</b> " + rcptto + "</p>" +
-                "</body></html>";
-
-        Home.mostraRespuesta(processingMsg);
-
         try {
             Email email = new Email(mailfrom, subject);
             Home.interprete(email);
-            enviar.sendmail(rcptto, subject);
 
             System.out.println("[OK] Comando procesado y correo enviado desde el panel grafico");
         } catch (Exception e) {
-            String errorMsg =
-                    "<html><body style='font-family: Arial; padding: 20px;'>" +
-                    "<h2 style='color: #d9534f;'>Error al procesar</h2>" +
-                    "<p>" + e.getMessage() + "</p>" +
-                    "</body></html>";
-
+            String errorMsg = Comunication.HtmlBuilder.generarMensajeErrorDetallado(
+                    "Error al Procesar",
+                    subject,
+                    e.getMessage(),
+                    "Verifique la sintaxis del comando enviado."
+            );
             Home.mostraRespuesta(errorMsg);
             e.printStackTrace();
         }

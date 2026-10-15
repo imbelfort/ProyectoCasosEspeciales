@@ -630,11 +630,8 @@ public class Home {
             @Override
             public void error(TokenEvent event) {
                 String tokenInvalido = (event.getParams() != null && !event.getParams().isEmpty()) ? event.getParams().get(0) : "";
-                String queFallo = (tokenInvalido != null && !tokenInvalido.trim().isEmpty())
-                        ? "La palabra o término '" + tokenInvalido + "' no corresponde a un Caso de Uso ni a una Acción válida."
-                        : "La sintaxis del comando no fue reconocida por el sistema.";
-                String sugerencia = "Asegúrese de escribir: <b>[entidad] [accion] [parametros]</b> (ejemplo: <code>solicitud listar</code> o <code>solicitud mis_casos</code>). Envíe <b>help</b> para ver el manual completo de comandos.";
-                enviarErrorDetallado(email, respuesta, "Error de Sintaxis en el Comando", queFallo, sugerencia);
+                Utils.ErrorExplainer.ErrorDetail ed = Utils.ErrorExplainer.diagnosticarSintaxis(email.getSubject(), tokenInvalido);
+                enviarErrorExplainer(email, respuesta, ed);
             }
 
             @Override
@@ -643,12 +640,12 @@ public class Home {
             }
         });
 
-        // Ejecutar interpretación sintáctica
+        // Ejecutar interpretacion sintactica
         interpreter.run();
     }
 
     // ============================================================
-    // MÉTODOS DE ENVÍO Y COMUNICACIÓN
+    // METODOS DE ENVIO Y COMUNICACION
     // ============================================================
 
     private static void enviarTabla(Email email, SendEmail respuesta, String titulo, String[] headers, List<String[]> filas) {
@@ -669,23 +666,26 @@ public class Home {
         System.out.println("[RESPUESTA EXITO] '" + titulo + "' -> " + email.getFrom() + " | " + mensaje);
     }
 
-    private static void enviarErrorDetallado(Email email, SendEmail respuesta, String titulo, String queFallo, String sugerencia) {
-        String comandoRecibido = email != null && email.getSubject() != null ? email.getSubject() : "";
-        String html = HtmlBuilder.generarMensajeErrorDetallado(titulo, comandoRecibido, queFallo, sugerencia);
+    private static void enviarErrorExplainer(Email email, SendEmail respuesta, Utils.ErrorExplainer.ErrorDetail ed) {
+        String html = HtmlBuilder.generarMensajeErrorCompleto(ed);
         mostraRespuesta(html);
         if (email != null && email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
-            respuesta.sendmail(email.getFrom(), "Error: " + titulo, html);
+            respuesta.sendmail(email.getFrom(), "Error: " + ed.getTitulo(), html);
         }
-        System.err.println("[RESPUESTA ERROR] '" + titulo + "' -> " + (email != null ? email.getFrom() : "") + " | " + queFallo);
+        System.err.println("[RESPUESTA ERROR] '" + ed.getTitulo() + "' -> " + (email != null ? email.getFrom() : "") + " | " + ed.getQueFallo());
+    }
+
+    private static void enviarErrorDetallado(Email email, SendEmail respuesta, String titulo, String queFallo, String sugerencia) {
+        Utils.ErrorExplainer.ErrorDetail ed = new Utils.ErrorExplainer.ErrorDetail();
+        ed.setTitulo(titulo);
+        ed.setComandoRecibido(email != null && email.getSubject() != null ? email.getSubject() : "");
+        ed.setQueFallo(queFallo);
+        ed.setSintaxisCorrecta(sugerencia);
+        enviarErrorExplainer(email, respuesta, ed);
     }
 
     private static void enviarError(String destinatario, SendEmail respuesta, String titulo, String mensaje) {
-        String html = HtmlBuilder.generarMensajeError(titulo, mensaje);
-        mostraRespuesta(html);
-        if (destinatario != null && !destinatario.trim().isEmpty()) {
-            respuesta.sendmail(destinatario, "Error: " + titulo, html);
-        }
-        System.err.println("[RESPUESTA ERROR] '" + titulo + "' -> " + destinatario + " | " + mensaje);
+        enviarErrorDetallado(new Email(destinatario, null), respuesta, titulo, mensaje, "Consulte los comandos validos con 'help'.");
     }
 
     private static void mostrarYEnviarHELP(Email email, SendEmail respuesta, String textoAyuda) {
@@ -698,39 +698,16 @@ public class Home {
     }
 
     private static void comandoDesconocido(Email email, SendEmail respuesta, String contextoEntidad, String accionesValidas) {
-        String queFallo;
-        String sugerencia;
-        if (contextoEntidad != null && !contextoEntidad.trim().isEmpty()) {
-            queFallo = "La acción indicada no es válida para la entidad '" + contextoEntidad + "'.";
-            sugerencia = "Las acciones válidas para <b>" + contextoEntidad + "</b> son: <code>" + accionesValidas + "</code>.<br>Envíe <code>" + contextoEntidad + " help</code> para ver el formato y ejemplos.";
-        } else {
-            queFallo = "El comando o acción no fue reconocido por el analizador sintáctico.";
-            sugerencia = "El formato estándar es: <b>[entidad] [accion] [parametros]</b> (ejemplo: <code>solicitud listar</code> o <code>solicitud mis_casos</code>). Envíe <b>help</b> para ver el manual completo.";
-        }
-        enviarErrorDetallado(email, respuesta, "Comando o Acción No Válida", queFallo, sugerencia);
+        String subject = email != null ? email.getSubject() : "";
+        Utils.ErrorExplainer.ErrorDetail ed = Utils.ErrorExplainer.diagnosticarComandoDesconocido(subject, contextoEntidad, accionesValidas);
+        enviarErrorExplainer(email, respuesta, ed);
     }
 
     private static void manejarExcepcion(Email email, SendEmail respuesta, Exception ex) {
-        String msg = ex.getMessage();
-        if (msg == null || msg.trim().isEmpty()) {
-            msg = ex.getClass().getSimpleName();
-        }
-
-        String queFallo = msg;
-        String sugerencia = "Verifique la sintaxis exacta del comando y que los datos cumplan con el formato solicitado.";
-
-        if (ex instanceof NumberFormatException) {
-            queFallo = "Uno de los parámetros debe ser un número entero (ID o valor numérico), pero se ingresó un valor no numérico: '" + msg + "'.";
-            sugerencia = "Revise los parámetros separados por comas y verifique que los identificadores numéricos requeridos sean válidos.";
-        } else if (ex instanceof SQLException) {
-            queFallo = "Error en la base de datos: " + msg;
-            sugerencia = "Verifique que los registros referenciados (estudiante, materia, grupo) existan previamente en el sistema.";
-        } else if (ex instanceof IllegalArgumentException) {
-            queFallo = msg;
-            sugerencia = "Revise la cantidad, tipo y orden de los parámetros enviados. Envíe [entidad] help para ver el formato.";
-        }
-
-        enviarErrorDetallado(email, respuesta, "Error en Parámetros o Ejecución", queFallo, sugerencia);
+        String subject = email != null ? email.getSubject() : "";
+        String from = email != null ? email.getFrom() : "";
+        Utils.ErrorExplainer.ErrorDetail ed = Utils.ErrorExplainer.diagnosticarExcepcion(subject, ex, from);
+        enviarErrorExplainer(email, respuesta, ed);
         ex.printStackTrace();
     }
 

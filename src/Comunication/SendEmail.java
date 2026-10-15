@@ -93,7 +93,7 @@ public class SendEmail {
                 writer.flush();
                 System.out.println("SMTP: " + reader.readLine());
 
-                if (Principal.cbx_emailsReceptores.isSelected()) {
+                if (Principal.cbx_emailsReceptores != null && Principal.cbx_emailsReceptores.isSelected()) {
                     // Obtener destinatarios desde JTextArea
                     String[] receptores = getEmailsReceptores();
 
@@ -150,7 +150,7 @@ public class SendEmail {
 
                 // Reconstruir lista To a partir de los RCPT enviados (usar getEmailsReceptores + remitente)
                 List<String> toList = new ArrayList<>();
-                if (Principal.cbx_emailsReceptores.isSelected()) {
+                if (Principal.cbx_emailsReceptores != null && Principal.cbx_emailsReceptores.isSelected()) {
                     if (esEmailValido(email.getFrom())) toList.add(email.getFrom().trim());
                     for (String r : getEmailsReceptores()) {
                         if (esEmailValido(r)) toList.add(r.trim());
@@ -216,7 +216,7 @@ public class SendEmail {
 
                 String finalData = data.toString();
 
-                writer.writeBytes(finalData);
+                writer.write(finalData.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 writer.flush();
                 String dataResponse = reader.readLine();
                 if (dataResponse != null) {
@@ -302,9 +302,18 @@ private boolean esEmailValido(String email) {
         }
     }
 
+    public void sendmail(String receptor, String subject, String htmlContent) {
+        if (receptor == null || receptor.trim().isEmpty()) {
+            System.out.println("[SendEmail] Destinatario vacio.");
+            return;
+        }
+        Email email = new Email(receptor.trim(), subject);
+        responseUser(email, htmlContent);
+    }
+
   public void sendmail(String receptor, String subject) {
     try {
-        // ConfiguraciÃ³n SMTP
+        // Configuración SMTP
         Properties p = new Properties();
         p.put("mail.smtp.host", "smtp.gmail.com");
         p.put("mail.smtp.starttls.enable", "true");
@@ -319,11 +328,11 @@ private boolean esEmailValido(String email) {
         mensaje.setSubject(subject);
         mensaje.setText("enviado");
 
-        // Agregar destinatarios segÃºn estado del checkbox
-        if (Principal.cbx_emailsReceptores.isSelected()) {
+        // Agregar destinatarios según estado del checkbox
+        if (Principal.cbx_emailsReceptores != null && Principal.cbx_emailsReceptores.isSelected()) {
             Set<String> destinatarios = new HashSet<>();
 
-            // Agregar receptor por parÃ¡metro
+            // Agregar receptor por parámetro
             if (esEmailValido(receptor)) {
                 destinatarios.add(receptor.trim());
             }
@@ -378,6 +387,9 @@ private boolean esEmailValido(String email) {
     }
 
     public String[] getEmailsReceptores() {
+        if (Principal.ta_emailsReceptores == null) {
+            return new String[0];
+        }
         String emailsReceptores = Principal.ta_emailsReceptores.getText();
 
         if (emailsReceptores == null || emailsReceptores.trim().isEmpty()) {
@@ -414,7 +426,7 @@ private boolean esEmailValido(String email) {
         private InlineEmailContent prepararContenidoInline(String html) {
             InlineEmailContent content = new InlineEmailContent();
 
-            if (html == null || html.isBlank()) {
+            if (html == null || html.trim().isEmpty()) {
                 content.htmlSanitizado = "";
                 return content;
             }
@@ -510,77 +522,49 @@ private boolean esEmailValido(String email) {
         }
 
 public String comandosHelp() {
-    return "<html><body style='font-family: Arial, sans-serif; padding: 20px;'>" +
-            "<h2 style='color:#2E7D32;'>Comandos disponibles del sistema</h2>" +
-
-            "<h3>CU1. Gestion de Usuarios</h3>" +
-            "<ul>" +
-            "<li>usuario help</li>" +
-            "<li>propietario help</li>" +
-            "<li>vendedor help</li>" +
-            "<li>cliente help</li>" +
-            "</ul>" +
-
-            "<h3>CU2. Gestion de Productos</h3>" +
-            "<ul>" +
-            "<li>categoria help</li>" +
-            "<li>producto help</li>" +
-            "<li>producto_variante help</li>" +
-            "</ul>" +
-
-            "<h3>CU3. Gestion de Compras</h3>" +
-            "<ul>" +
-            "<li>proveedor help</li>" +
-            "<li>compra help</li>" +
-            "<li>detalle_compra help</li>" +
-            "</ul>" +
-
-            "<h3>CU4. Gestion de Inventarios</h3>" +
-            "<ul>" +
-            "<li>tecnica_inventario help</li>" +
-            "<li>tecnica_costo help</li>" +
-            "<li>movimiento_inventario help</li>" +
-            "<li>lote_inventario help</li>" +
-            "<li>salida_lote help</li>" +
-            "</ul>" +
-
-            "<h3>CU5. Gestion de Promociones</h3>" +
-            "<ul>" +
-            "<li>promocion help</li>" +
-            "<li>promocion_producto help</li>" +
-            "<li>promocion_categoria help</li>" +
-            "</ul>" +
-
-            "<h3>CU6. Gestion de Ventas</h3>" +
-            "<ul>" +
-            "<li>carrito help</li>" +
-            "<li>carrito_detalle help</li>" +
-            "<li>pedido help</li>" +
-            "<li>pedido_detalle help</li>" +
-            "<li>venta help</li>" +
-            "<li>detalle_venta help</li>" +
-            "<li>credito help</li>" +
-            "</ul>" +
-
-            "<h3>CU7. Gestion de Pagos</h3>" +
-            "<ul>" +
-            "<li>metodo_pago help</li>" +
-            "<li>pago_contado help</li>" +
-            "<li>pago_cuota help</li>" +
-            "</ul>" +
-
-            "<h3>CU8. Reportes y Estadisticas</h3>" +
-            "<ul>" +
-            "<li>reporte help</li>" +
-            "<li>notificacion help</li>" +
-            "</ul>" +
-
-            "<p style='margin-top: 25px; color:#555;'>" +
-            "Para ver los comandos especificos de cada modulo, envie el comando help correspondiente. " +
-            "Ejemplo: <b>producto help</b>" +
-            "</p>" +
-
-            "</body></html>";
+    return HtmlBuilder.generarAyuda(
+            "Comandos Disponibles del Sistema",
+            "CU1. GESTION DE USUARIOS Y ROLES:\n" +
+            "  - usuario listar\n" +
+            "  - usuario agregar nombre,apellidos,ci,email,telefono,direccion,fecha_nac(yyyy-MM-dd),password\n" +
+            "  - usuario modificar id,nombre,apellidos,ci,email,telefono,direccion,fecha_nac,password,estado\n" +
+            "  - usuario eliminar id\n" +
+            "  - rol listar | rol agregar nombre,descripcion | rol asignar id_usuario,id_rol\n" +
+            "  - estudiante listar | estudiante agregar id_usuario,registro,id_carrera,semestre\n" +
+            "  - personal_carrera listar | personal_carrera agregar id_usuario,cargo,id_carrera\n" +
+            "  - director_carrera listar | director_carrera agregar id_usuario,id_carrera,gestion_inicio,gestion_fin\n\n" +
+            "CU2. SOLICITUD DE CASO ESPECIAL:\n" +
+            "  - solicitud listar\n" +
+            "  - solicitud mis_casos [registro,password]\n" +
+            "  - solicitud pendientes [registro,password]\n" +
+            "  - solicitud registrar id_estudiante,id_periodo,tipo_caso,motivo\n" +
+            "  - solicitud consultar id_solicitud\n" +
+            "  - solicitud_grupo agregar id_solicitud,id_grupo,motivo | solicitud_grupo listar id_solicitud\n" +
+            "  - archivo_solicitud agregar id_solicitud,nombre_archivo,tipo,ruta | archivo_solicitud listar id_solicitud\n\n" +
+            "CU3. EVALUACION DIRECCION DE CARRERA:\n" +
+            "  - evaluacion listar\n" +
+            "  - evaluacion registrar id_solicitud,id_evaluador,decision(APROBADA|RECHAZADA|OBSERVADA),justificacion,observaciones\n\n" +
+            "CU4. CONTROL Y BLOQUEO DE CUPOS:\n" +
+            "  - carrera listar | carrera agregar codigo,nombre,facultad\n" +
+            "  - periodo listar | periodo agregar gestion,fecha_inicio,fecha_fin\n" +
+            "  - materia listar | materia agregar sigla,nombre,semestre,creditos\n" +
+            "  - grupo listar | grupo consultar id_grupo\n" +
+            "  - grupo agregar id_materia,id_periodo,sigla_grupo,docente,cupo_max,cupo_exc\n" +
+            "  - bloqueo_grupo listar\n" +
+            "  - bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador\n" +
+            "  - bloqueo_grupo liberar id_bloqueo,observacion\n\n" +
+            "CU5. REMISION A CPD:\n" +
+            "  - oficio_cpd listar\n" +
+            "  - oficio_cpd generar id_solicitud,destinatario,referencia,detalle,id_responsable\n\n" +
+            "CU6. CONFIRMACION Y HABILITACION CPD:\n" +
+            "  - respuesta_cpd listar\n" +
+            "  - respuesta_cpd registrar id_oficio,id_solicitud,resultado,respaldo,observaciones,id_responsable\n\n" +
+            "CU7. HISTORIAL Y NOTIFICACIONES:\n" +
+            "  - historial listar | historial consultar id_solicitud\n" +
+            "  - notificacion listar\n\n" +
+            "CU8. REPORTES Y ESTADISTICAS:\n" +
+            "  - reporte general | reporte estados | reporte periodos | reporte cupos\n"
+    );
 }
 
 
