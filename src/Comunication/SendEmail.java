@@ -80,18 +80,16 @@ public class SendEmail {
             writer = new DataOutputStream(socket.getOutputStream());
 
             if (socket != null && reader != null && writer != null) {
-                System.out.println("SMTP: " + reader.readLine());
+                logSmtp("S", reader.readLine());
 
                 // Saludar al servidor
                 command = "HELO " + SERVER + "\r\n";
-                writer.writeBytes(command);
-                writer.flush();
-                System.out.println("SMTP: " + reader.readLine());
+                sendSmtpCommand(writer, command);
+                logSmtp("S", reader.readLine());
 
-                command = "MAIL FROM:" + user_emisor + "\r\n";
-                writer.writeBytes(command);
-                writer.flush();
-                System.out.println("SMTP: " + reader.readLine());
+                command = "MAIL FROM:<" + user_emisor + ">\r\n";
+                sendSmtpCommand(writer, command);
+                logSmtp("S", reader.readLine());
 
                 if (Principal.cbx_emailsReceptores != null && Principal.cbx_emailsReceptores.isSelected()) {
                     // Obtener destinatarios desde JTextArea
@@ -115,18 +113,16 @@ public class SendEmail {
                     // Enviar RCPT TO para cada destinatario (usar <> segÃºn RFC)
                     for (String destinatario : destinatarios) {
                         command = "RCPT TO:<" + destinatario + ">\r\n";
-                        writer.writeBytes(command);
-                        writer.flush();
-                        System.out.println("SMTP: " + reader.readLine());
+                        sendSmtpCommand(writer, command);
+                        logSmtp("S", reader.readLine());
                     }
                 } else {
                     // Solo al remitente original
                     String origen = email.getFrom();
                     if (esEmailValido(origen)) {
                         command = "RCPT TO:<" + origen.trim() + ">\r\n";
-                        writer.writeBytes(command);
-                        writer.flush();
-                        System.out.println("SMTP: " + reader.readLine());
+                        sendSmtpCommand(writer, command);
+                        logSmtp("S", reader.readLine());
                     } else {
                         // Si no hay destinatario vÃ¡lido, cancelar
                         System.out.println("Correo de respuesta no enviado: no hay destinatarios vÃ¡lidos");
@@ -140,9 +136,8 @@ public class SendEmail {
                 // Escribir Mensaje
                 // Comenzar DATA
                 command = "DATA\r\n";
-                writer.writeBytes(command);
-                writer.flush();
-                System.out.println("SMTP: " + reader.readLine());
+                sendSmtpCommand(writer, command);
+                logSmtp("S", reader.readLine());
 
                 // Construir cabeceras mÃ­nimas vÃ¡lidas (From, To, Subject, MIME)
                 StringBuilder data = new StringBuilder();
@@ -226,11 +221,10 @@ public class SendEmail {
                 }
 
                 command = "QUIT\r\n";
-                writer.writeBytes(command);
-                writer.flush();
+                sendSmtpCommand(writer, command);
                 String quitResponse = reader.readLine();
                 if (quitResponse != null) {
-                    System.out.println("SMTP: " + quitResponse);
+                    logSmtp("S", quitResponse);
                 }
 
                 System.out.println("Correo de respuesta enviado exitosamente a: " + email.getFrom());
@@ -248,6 +242,18 @@ public class SendEmail {
             System.out.println("Correo de respuesta no enviado: " + ex.getMessage());
         } catch (Exception ex) {
             System.out.println("Correo de respuesta no enviado: " + ex.getMessage());
+        }
+    }
+
+    private static void sendSmtpCommand(DataOutputStream writer, String command) throws IOException {
+        System.out.println("[SMTP][C] " + command.replace("\r", "").replace("\n", ""));
+        writer.writeBytes(command);
+        writer.flush();
+    }
+
+    private static void logSmtp(String direction, String message) {
+        if (message != null) {
+            System.out.println("[SMTP][" + direction + "] " + message);
         }
     }
 

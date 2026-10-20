@@ -375,7 +375,7 @@ public class InicializarDB {
                     "('PERSONAL_ACADEMICO', 'Personal administrativo y academico de Carrera'), " +
                     "('ESTUDIANTE', 'Estudiante universitario solicitante'), " +
                     "('CPD', 'Centro de Procesamiento de Datos') " +
-                    "ON CONFLICT (nombre) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Carreras
@@ -384,14 +384,14 @@ public class InicializarDB {
                     "('187-3', 'Ingenieria en Sistemas', 'Facultad de Ciencias de la Computacion y Telecomunicaciones'), " +
                     "('187-4', 'Ingenieria Informatica', 'Facultad de Ciencias de la Computacion y Telecomunicaciones'), " +
                     "('187-5', 'Ingenieria en Redes y Telecomunicaciones', 'Facultad de Ciencias de la Computacion y Telecomunicaciones') " +
-                    "ON CONFLICT (codigo) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Periodos
             stmt.executeUpdate(
                     "INSERT INTO periodos (gestion, fecha_inicio, fecha_fin, estado) VALUES " +
                     "('1-2026', '2026-02-15', '2026-07-15', 'ACTIVO') " +
-                    "ON CONFLICT (gestion) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Materias
@@ -402,7 +402,7 @@ public class InicializarDB {
                     "('MAT101', 'Calculo I', 1, 5), " +
                     "('INF110', 'Introduccion a la Informatica', 1, 4), " +
                     "('INF310', 'Sistemas de Informacion II', 6, 5) " +
-                    "ON CONFLICT (sigla) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Usuarios Semilla
@@ -413,34 +413,34 @@ public class InicializarDB {
                     "(3, 'Carlos', 'Mendez Torrico', '3333333', 'carlos.mendez@tecnoweb.org.bo', '70033333', 'Plan 3000', 'cmendez', '123456', 'ACTIVO', '2002-03-15'), " +
                     "(4, 'Ana Sofia', 'Perez Hurtado', '4444444', 'ana.perez@tecnoweb.org.bo', '70044444', 'Barrio Sirari', 'aperez', '123456', 'ACTIVO', '2003-09-22'), " +
                     "(5, 'Roberto', 'Silva Gutierrez', '5555555', 'cpd@tecnoweb.org.bo', '70055555', 'Campus Universitario CPD', 'cpd_admin', '123456', 'ACTIVO', '1975-11-30') " +
-                    "ON CONFLICT (id_usuario) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Asignación de Roles
             stmt.executeUpdate(
                     "INSERT INTO usuario_roles (id_usuario, id_rol) VALUES " +
                     "(1, 1), (2, 2), (3, 3), (4, 3), (5, 4) " +
-                    "ON CONFLICT (id_usuario, id_rol) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Perfiles
             stmt.executeUpdate(
                     "INSERT INTO director_carrera (id_director, carrera_id, gestion_inicio, gestion_fin) VALUES " +
                     "(1, 1, '2025-01-01', '2027-12-31') " +
-                    "ON CONFLICT (id_director) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             stmt.executeUpdate(
                     "INSERT INTO personal_carrera (id_personal, cargo, carrera_id) VALUES " +
                     "(2, 'Secretaria Academica', 1) " +
-                    "ON CONFLICT (id_personal) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             stmt.executeUpdate(
                     "INSERT INTO estudiantes (id_estudiante, registro_universitario, carrera_id, semestre_actual) VALUES " +
                     "(3, '220011223', 1, 4), " +
                     "(4, '220033445', 1, 4) " +
-                    "ON CONFLICT (id_estudiante) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Grupos
@@ -449,16 +449,16 @@ public class InicializarDB {
                     "(1, 1, 'SA', 'Ing. Juan Perez', 45, 5, 5, 'ABIERTO'), " +
                     "(1, 1, 'SC', 'Ing. Evans Balcazar', 40, 2, 5, 'ABIERTO'), " +
                     "(2, 1, 'SB', 'Ing. Mario Lopez', 45, 8, 5, 'ABIERTO') " +
-                    "ON CONFLICT (id_materia, id_periodo, sigla_grupo) DO NOTHING"
+                    "ON CONFLICT DO NOTHING"
             );
 
             // Sincronizar secuencias de PostgreSQL para evitar colisiones de ID al insertar nuevos registros
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('usuario', 'id_usuario'), COALESCE(MAX(id_usuario), 1)) FROM usuario");
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('roles', 'id'), COALESCE(MAX(id), 1)) FROM roles");
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('carrera', 'id'), COALESCE(MAX(id), 1)) FROM carrera");
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('periodos', 'id'), COALESCE(MAX(id), 1)) FROM periodos");
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('materia', 'id'), COALESCE(MAX(id), 1)) FROM materia");
-            stmt.executeUpdate("SELECT setval(pg_get_serial_sequence('grupo', 'id'), COALESCE(MAX(id), 1)) FROM grupo");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('usuario', 'id_usuario'), COALESCE(MAX(id_usuario), 1)) FROM usuario");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('roles', 'id'), COALESCE(MAX(id), 1)) FROM roles");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('carrera', 'id'), COALESCE(MAX(id), 1)) FROM carrera");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('periodos', 'id'), COALESCE(MAX(id), 1)) FROM periodos");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('materia', 'id'), COALESCE(MAX(id), 1)) FROM materia");
+            stmt.execute("SELECT setval(pg_get_serial_sequence('grupo', 'id'), COALESCE(MAX(id), 1)) FROM grupo");
 
             System.out.println("[OK] Datos iniciales insertados correctamente.");
 
