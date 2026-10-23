@@ -1,0 +1,154 @@
+@startuml
+title CU1 - Gestión de Usuarios (Director, Académico y Estudiantes)
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Usuario por correo\nDirector / Académico /\nEstudiante" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "IEmailEventListener" as EmailListener
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "UsuarioService" as Service
+participant "UsuarioDAO" as DAO
+participant "Conexion" as DB
+
+note over Actor, Home
+  El usuario envía comandos por correo.
+  La foto de perfil puede llegar como archivo adjunto.
+end note
+
+Actor -> Principal : Ejecuta el sistema
+activate Principal
+Principal -> Home : iniciar()
+activate Home
+Home -> EmailListener : registrar listener
+Home -> TokenListener : registrar listener
+deactivate Principal
+
+Actor -> Home : enviar correo(comando,\nparámetros, foto opcional)
+Home -> EmailListener : onReceiveEmailEvent(email)
+activate EmailListener
+EmailListener -> Home : interpretar(email)
+deactivate EmailListener
+Home -> TokenListener : usuario(token, parámetros, foto)
+activate TokenListener
+TokenListener -> Service : ejecutar operación
+activate Service
+
+alt acción = "help"
+  Service --> TokenListener : getComandosUsuario()
+  TokenListener --> Home : comandos disponibles
+  Home --> Actor : mostrar ayuda
+
+else acción = "listar"
+  Service -> DAO : listAll()
+  activate DAO
+  DAO -> DB : getInstancia().EstablecerConexion()
+  activate DB
+  DB --> DAO : Connection
+  deactivate DB
+  DAO --> Service : List<String[]>
+  deactivate DAO
+  Service --> TokenListener : lista de usuarios
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar tabla de usuarios\n(con foto de perfil)
+
+else acción = "agregar"
+  Service -> Service : validar parámetros,\nCI, correo y fecha
+  Service -> DAO : existsByCi(ci)
+  activate DAO
+  DAO -> DB : getInstancia().EstablecerConexion()
+  activate DB
+  DB --> DAO : Connection
+  deactivate DB
+  DAO --> Service : CI no existente
+  deactivate DAO
+  Service -> DAO : existsByEmail(email)
+  activate DAO
+  DAO -> DB : getInstancia().EstablecerConexion()
+  activate DB
+  DB --> DAO : Connection
+  deactivate DB
+  DAO --> Service : correo no existente
+  deactivate DAO
+  Service -> Service : crear Usuario\n(estado = ACTIVO,\nfotoPerfil = adjunto o null)
+  Service -> DAO : create(usuario)
+  activate DAO
+  DAO -> DB : INSERT usuario\n(incluye foto_perfil)
+  activate DB
+  DB --> DAO : id generado
+  deactivate DB
+  DAO --> Service : usuario creado
+  deactivate DAO
+  Service --> TokenListener : confirmación
+  TokenListener --> Home : mostrarRespuesta(mensaje)
+  Home --> Actor : usuario creado
+
+else acción = "modificar"
+  Service -> Service : validar parámetros
+  alt foto nueva adjunta
+    Service -> Service : asignar fotoPerfil nueva
+  else sin foto nueva
+    Service -> DAO : readById(id)
+    activate DAO
+    DAO -> DB : SELECT usuario por id
+    activate DB
+    DB --> DAO : registro actual
+    deactivate DB
+    DAO --> Service : fotoPerfil actual
+    deactivate DAO
+    Service -> Service : conservar fotoPerfil actual
+  end
+  Service -> DAO : update(usuario)
+  activate DAO
+  DAO -> DB : UPDATE usuario\n(incluye foto_perfil)
+  activate DB
+  DB --> DAO : registro actualizado
+  deactivate DB
+  DAO --> Service : usuario actualizado
+  deactivate DAO
+  Service --> TokenListener : confirmación
+  TokenListener --> Home : mostrarRespuesta(mensaje)
+  Home --> Actor : usuario actualizado
+
+else acción = "eliminar"
+  Service -> DAO : delete(id)
+  activate DAO
+  DAO -> DB : DELETE usuario por id
+  activate DB
+  DB --> DAO : registro eliminado
+  deactivate DB
+  DAO --> Service : usuario eliminado
+  deactivate DAO
+  Service --> TokenListener : confirmación
+  TokenListener --> Home : mostrarRespuesta(mensaje)
+  Home --> Actor : usuario eliminado
+
+else comando inválido o error de validación
+  Service --> TokenListener : error(mensaje)
+  TokenListener --> Home : mostrarRespuesta(error)
+  Home --> Actor : enviar mensaje de error
+end
+
+deactivate Service
+deactivate TokenListener
+deactivate Home
+@enduml

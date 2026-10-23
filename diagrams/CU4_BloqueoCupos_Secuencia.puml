@@ -1,0 +1,118 @@
+@startuml
+title CU4 - Gestionar el Bloqueo y Control de Cupos de Materias/Paralelos
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Usuario autorizado\npor correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "BloqueoGrupoService" as Service
+participant "GrupoDAO" as GrupoDAO
+participant "BloqueoGrupoDAO" as BloqueoDAO
+participant "HistorialSolicitudDAO" as HistorialDAO
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "bloquear"
+  TokenListener -> Service : bloquearCupo(params)
+  activate Service
+  Service -> Service : validar grupo, solicitud,\ncantidad y motivo
+  Service -> GrupoDAO : descontarCupo(idGrupo,\ncantidad)
+  GrupoDAO -> DB : UPDATE cupos_disponibles\nWHERE cupos_disponibles >= cantidad
+
+  alt cupos suficientes
+    DB --> GrupoDAO : actualización exitosa
+    GrupoDAO --> Service : true
+    Service -> BloqueoDAO : create(bloqueo RESERVADO)
+    BloqueoDAO -> DB : INSERT bloqueo_grupo
+    Service -> HistorialDAO : create(APROBADA_DIRECCION\n-> CUPO_RESERVADO)
+    HistorialDAO -> DB : INSERT historial_solicitud
+    Service --> TokenListener : cupo bloqueado
+  else cupos insuficientes
+    DB --> GrupoDAO : sin actualización
+    GrupoDAO --> Service : false
+    Service --> TokenListener : error: no hay cupos suficientes
+  end
+  deactivate Service
+
+  TokenListener -> Service : listarBloqueos()
+  Service -> BloqueoDAO : listAll()
+  BloqueoDAO -> DB : SELECT bloqueos
+  DB --> BloqueoDAO : lista
+  BloqueoDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar control de cupos
+  Home --> Actor : enviar confirmación
+
+else acción = "liberar"
+  TokenListener -> Service : liberarCupo(idBloqueo,\nobservación)
+  activate Service
+  Service -> BloqueoDAO : readById(idBloqueo)
+  BloqueoDAO -> DB : SELECT bloqueo
+  DB --> BloqueoDAO : bloqueo
+
+  alt bloqueo existe y está RESERVADO
+    BloqueoDAO --> Service : datos del bloqueo
+    Service -> GrupoDAO : liberarCupo(idGrupo,\ncantidad)
+    GrupoDAO -> DB : UPDATE cupos_disponibles\n+ cantidad
+    Service -> BloqueoDAO : liberarBloqueo(id,\nobservación)
+    BloqueoDAO -> DB : UPDATE estado = LIBERADO
+    Service -> HistorialDAO : create(CUPO_RESERVADO\n-> CUPO_LIBERADO)
+    HistorialDAO -> DB : INSERT historial_solicitud
+    Service --> TokenListener : cupo liberado
+  else bloqueo inexistente o no reservado
+    BloqueoDAO --> Service : error de validación
+    Service --> TokenListener : error
+  end
+  deactivate Service
+
+  TokenListener -> Service : listarBloqueos()
+  Service -> BloqueoDAO : listAll()
+  BloqueoDAO -> DB : SELECT bloqueos
+  DB --> BloqueoDAO : lista actualizada
+  BloqueoDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar control actualizado
+  Home --> Actor : enviar confirmación
+
+else acción = "listar"
+  TokenListener -> Service : listarBloqueos()
+  Service -> BloqueoDAO : listAll()
+  BloqueoDAO -> DB : SELECT bloqueos
+  DB --> BloqueoDAO : lista
+  BloqueoDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar bloqueos y cupos
+
+else help o error
+  TokenListener -> Service : getComandosBloqueo()
+  Service --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml

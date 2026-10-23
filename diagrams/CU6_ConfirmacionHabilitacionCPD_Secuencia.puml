@@ -1,0 +1,91 @@
+@startuml
+title CU6 - Gestionar el Registro de Confirmación y Habilitación de CPD
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Responsable de CPD\npor correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "RespuestaCpdService" as Service
+participant "OficioRespuestaCpdDAO" as RespuestaDAO
+participant "SolicitudDAO" as SolicitudDAO
+participant "Historial y notificación" as Seguimiento
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "registrar"
+  TokenListener -> Service : registrarRespuestaCpd(params,\nemailRemitente)
+  activate Service
+  Service -> Service : validar parámetros y generar\ncódigo R-CPD-2026-XXXX
+  Service -> RespuestaDAO : create(respuesta CPD)
+  RespuestaDAO -> DB : INSERT oficio_respuesta_cpd
+  DB --> RespuestaDAO : id generado
+  RespuestaDAO --> Service : respuesta registrada
+
+  alt resultado = HABILITADA
+    Service -> Service : nuevo estado = HABILITADA
+  else resultado = CONFIRMADA_CPD
+    Service -> Service : nuevo estado = CONFIRMADA_CPD
+  else resultado = OBSERVADA_CPD
+    Service -> Service : nuevo estado = OBSERVADA_CPD
+  else resultado = RECHAZADA_CPD
+    Service -> Service : nuevo estado = RECHAZADA_CPD
+  end
+
+  Service -> SolicitudDAO : updateEstado(idSolicitud,\nnuevoEstado, responsable, observaciones)
+  SolicitudDAO -> DB : UPDATE solicitud
+  Service -> Seguimiento : registrar historial y\nnotificación
+  Seguimiento -> DB : INSERT historial y notificación
+  Service --> TokenListener : respuesta registrada
+  deactivate Service
+
+  TokenListener -> Service : listarRespuestas()
+  Service -> RespuestaDAO : listAll()
+  RespuestaDAO -> DB : SELECT respuestas CPD
+  DB --> RespuestaDAO : lista
+  RespuestaDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar confirmación
+
+else acción = "listar"
+  TokenListener -> Service : listarRespuestas()
+  Service -> RespuestaDAO : listAll()
+  RespuestaDAO -> DB : SELECT respuestas CPD
+  DB --> RespuestaDAO : lista
+  RespuestaDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar respuestas y habilitaciones
+  Home --> Actor : enviar listado
+
+else help o error
+  TokenListener -> Service : getComandosRespuesta()
+  Service --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml

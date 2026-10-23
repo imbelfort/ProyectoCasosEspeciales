@@ -1,0 +1,94 @@
+@startuml
+title CU3 - Gestionar la Evaluación de Solicitud por Dirección de Carrera
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Dirección de Carrera\npor correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "EvaluacionService" as Service
+participant "SolicitudDAO" as SolicitudDAO
+participant "EvaluacionSolicitudDAO" as EvaluacionDAO
+participant "Historial y notificación" as Seguimiento
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "registrar" o "evaluar"
+  TokenListener -> Service : evaluarSolicitud(params,\nemailRemitente)
+  activate Service
+  Service -> Service : validar parámetros y decisión
+  Service -> SolicitudDAO : getEstado(idSolicitud)
+  SolicitudDAO -> DB : SELECT estado
+  DB --> SolicitudDAO : estado actual
+  SolicitudDAO --> Service : estado anterior
+
+  alt decisión = APROBADA
+    Service -> Service : nuevo estado =\nAPROBADA_DIRECCION
+  else decisión = RECHAZADA
+    Service -> Service : nuevo estado =\nRECHAZADA_DIRECCION
+  else decisión = OBSERVADA
+    Service -> Service : nuevo estado = OBSERVADA
+  else decisión inválida
+    Service --> TokenListener : error de decisión
+  end
+
+  Service -> EvaluacionDAO : create(evaluación)
+  EvaluacionDAO -> DB : INSERT evaluacion_solicitud
+  DB --> EvaluacionDAO : evaluación registrada
+  Service -> SolicitudDAO : updateEstado(id,\nnuevoEstado, evaluador, observaciones)
+  SolicitudDAO -> DB : UPDATE solicitud
+  Service -> Seguimiento : registrar historial y notificación
+  Seguimiento -> DB : INSERT historial y notificación
+  Service --> TokenListener : evaluación registrada
+  deactivate Service
+
+  TokenListener -> Service : listarEvaluaciones()
+  Service -> EvaluacionDAO : listAll()
+  EvaluacionDAO -> DB : SELECT evaluaciones
+  DB --> EvaluacionDAO : lista de evaluaciones
+  EvaluacionDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar confirmación
+
+else acción = "listar"
+  TokenListener -> Service : listarEvaluaciones()
+  Service -> EvaluacionDAO : listAll()
+  EvaluacionDAO -> DB : SELECT evaluaciones
+  DB --> EvaluacionDAO : lista
+  EvaluacionDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar evaluaciones
+
+else help o error
+  TokenListener -> Service : getComandosEvaluacion()
+  Service --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml

@@ -1,0 +1,122 @@
+@startuml
+title CU2 - Gestionar el Registro y Envío de Solicitud de Caso Especial
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Estudiante por correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "SolicitudService" as SolicitudService
+participant "SolicitudDAO" as SolicitudDAO
+participant "EstudianteDAO" as EstudianteDAO
+participant "Gestión de grupos y archivos" as Apoyo
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "registrar"
+  TokenListener -> SolicitudService : registrarSolicitud(params,\nemailRemitente)
+  activate SolicitudService
+
+  alt params incluye id_estudiante
+    SolicitudService -> SolicitudService : obtener datos de solicitud
+  else params sin id_estudiante
+    SolicitudService -> EstudianteDAO : findIdByEmail(email)
+    EstudianteDAO -> DB : SELECT estudiante por correo
+    DB --> EstudianteDAO : idEstudiante
+    EstudianteDAO --> SolicitudService : idEstudiante
+  end
+
+  SolicitudService -> SolicitudService : generar código y preparar\nsolicitud ENVIADA
+  SolicitudService -> SolicitudDAO : create(solicitud ENVIADA)
+  SolicitudDAO -> DB : INSERT solicitud
+  DB --> SolicitudDAO : id generado
+  SolicitudDAO --> SolicitudService : solicitud creada
+
+  SolicitudService --> TokenListener : solicitud registrada
+  deactivate SolicitudService
+
+  TokenListener -> SolicitudService : listarSolicitudes()
+  SolicitudService -> SolicitudDAO : listAll()
+  SolicitudDAO -> DB : SELECT solicitudes actualizadas
+  DB --> SolicitudDAO : lista
+  SolicitudDAO --> SolicitudService : List<String[]>
+  SolicitudService --> TokenListener : resultado
+  TokenListener --> Home : enviar tabla y constancia
+  Home --> Actor : solicitud registrada
+
+else acción = "listar" o "consultar"
+  TokenListener -> SolicitudService : listarSolicitudes()\no consultarSolicitud(id)
+  SolicitudService -> SolicitudDAO : listAll()\no readById(id)
+  SolicitudDAO -> DB : consultar solicitudes
+  DB --> SolicitudDAO : resultado
+  SolicitudDAO --> SolicitudService : lista o detalle
+  SolicitudService --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar consulta
+
+else acción = "mis_casos" o "pendientes"
+  TokenListener -> SolicitudService : listarMisCasos()\no listarMisPendientes()
+  alt registro y contraseña
+    SolicitudService -> EstudianteDAO : autenticar(registro,\npassword)
+    EstudianteDAO -> DB : validar credenciales
+    DB --> EstudianteDAO : resultado
+  end
+  SolicitudService -> SolicitudDAO : consultar solicitudes del estudiante
+  SolicitudDAO -> DB : SELECT solicitudes
+  DB --> SolicitudDAO : lista
+  SolicitudDAO --> SolicitudService : List<String[]>
+  SolicitudService -> SolicitudService : filtrar pendientes si corresponde
+  SolicitudService --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar solicitudes
+
+else acción = "solicitud_grupo agregar"
+  TokenListener -> SolicitudService : agregarGrupoASolicitud(params)
+  SolicitudService -> Apoyo : registrar grupo y consultar grupos
+  Apoyo -> DB : INSERT y SELECT solicitud_grupo
+  DB --> Apoyo : grupos relacionados
+  Apoyo --> SolicitudService : List<String[]>
+  SolicitudService --> TokenListener : grupo agregado
+  TokenListener --> Home : mostrar tabla de grupos
+  Home --> Actor : enviar confirmación
+
+else acción = "archivo_solicitud agregar"
+  TokenListener -> Apoyo : adjuntar y consultar archivo(params)
+  Apoyo -> DB : INSERT y SELECT archivo_solicitud
+  DB --> Apoyo : archivos adjuntos
+  Apoyo --> TokenListener : List<String[]>
+  TokenListener --> Home : mostrar tabla de archivos
+  Home --> Actor : enviar confirmación
+
+else help o error
+  TokenListener -> SolicitudService : getComandosSolicitud()
+  SolicitudService --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml

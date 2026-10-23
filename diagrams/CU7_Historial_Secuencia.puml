@@ -1,0 +1,64 @@
+@startuml
+title CU7 - Gestión de Historial y Trazabilidad
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Usuario autorizado\npor correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "HistorialService" as Service
+participant "HistorialSolicitudDAO" as DAO
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "listar"
+  TokenListener -> Service : listarTodoElHistorial()
+  Service -> DAO : listAll()
+  DAO -> DB : SELECT historial completo
+  DB --> DAO : registros ordenados
+  DAO --> Service : List<String[]>
+  Service --> TokenListener : historial general
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar historial
+
+else acción = "consultar"
+  TokenListener -> Service : consultarHistorialSolicitud(idSolicitud)
+  Service -> DAO : listBySolicitud(idSolicitud)
+  DAO -> DB : SELECT historial por solicitud
+  DB --> DAO : eventos de la solicitud
+  DAO --> Service : List<String[]>
+  Service --> TokenListener : historial de solicitud
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar trazabilidad
+
+else help o error
+  TokenListener -> Service : getComandosHistorial()
+  Service --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml

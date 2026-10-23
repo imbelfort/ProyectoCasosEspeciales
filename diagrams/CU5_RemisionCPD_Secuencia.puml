@@ -1,0 +1,81 @@
+@startuml
+title CU5 - Gestionar el Procesamiento y Remisión de Casos Especiales a CPD
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor white
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor white
+  ParticipantFontColor #000000
+  ActorBorderColor #333333
+  ActorBackgroundColor white
+  ActorFontColor #000000
+  BoxBorderColor #666666
+  GroupBorderColor #666666
+  GroupBackgroundColor white
+  GroupHeaderFontColor #000000
+  ParticipantRoundCorner 15
+  MessageAlign center
+}
+
+actor "Responsable de remisión\npor correo" as Actor
+participant "Principal" as Principal
+participant "Home" as Home
+participant "ITokenCasoUsoEventListener" as TokenListener
+participant "OficioCpdService" as Service
+participant "OficioCpdDAO" as OficioDAO
+participant "SolicitudDAO" as SolicitudDAO
+participant "Historial y notificación" as Seguimiento
+participant "Conexion" as DB
+
+Actor -> Principal : Ejecuta el sistema
+Principal -> Home : iniciar()
+Home -> TokenListener : registrar listener
+Actor -> Home : enviar correo(comando,\nparámetros)
+Home -> TokenListener : procesar evento
+
+alt acción = "generar"
+  TokenListener -> Service : remitirACpd(params,\nemailRemitente)
+  activate Service
+  Service -> Service : validar parámetros
+  Service -> Service : generar número\nOF-CPD-2026-XXXX
+  Service -> OficioDAO : create(oficio EMITIDO)
+  OficioDAO -> DB : INSERT oficio_cpd
+  DB --> OficioDAO : id generado
+  OficioDAO --> Service : oficio creado
+  Service -> SolicitudDAO : updateEstado(idSolicitud,\nREMITIDA_A_CPD)
+  SolicitudDAO -> DB : UPDATE solicitud
+  Service -> Seguimiento : registrar historial y\nnotificación a CPD
+  Seguimiento -> DB : INSERT historial y notificación
+  Service --> TokenListener : remisión registrada
+  deactivate Service
+
+  TokenListener -> Service : listarOficios()
+  Service -> OficioDAO : listAll()
+  OficioDAO -> DB : SELECT oficios
+  DB --> OficioDAO : lista de oficios
+  OficioDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar tabla HTML
+  Home --> Actor : enviar confirmación de remisión
+
+else acción = "listar"
+  TokenListener -> Service : listarOficios()
+  Service -> OficioDAO : listAll()
+  OficioDAO -> DB : SELECT oficios
+  DB --> OficioDAO : lista
+  OficioDAO --> Service : List<String[]>
+  Service --> TokenListener : resultado
+  TokenListener --> Home : mostrar oficios remitidos
+  Home --> Actor : enviar listado
+
+else help o error
+  TokenListener -> Service : getComandosOficio()
+  Service --> TokenListener : comandos disponibles
+  TokenListener --> Home : mostrar ayuda o error
+  Home --> Actor : enviar respuesta
+end
+@enduml
