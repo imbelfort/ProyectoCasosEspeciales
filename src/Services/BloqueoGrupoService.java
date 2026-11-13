@@ -1,95 +1,68 @@
 package Services;
 
 import DAO.BloqueoGrupoDAO;
-import DAO.GrupoDAO;
-import DAO.HistorialSolicitudDAO;
 import Models.BloqueoGrupo;
-import Models.HistorialSolicitud;
 
 import java.sql.SQLException;
 import java.util.List;
 
 public class BloqueoGrupoService {
 
-    private BloqueoGrupoDAO bloqueoDAO;
-    private GrupoDAO grupoDAO;
-    private HistorialSolicitudDAO historialDAO;
+    private final BloqueoGrupoDAO bloqueoDAO;
 
     public BloqueoGrupoService() {
         this.bloqueoDAO = new BloqueoGrupoDAO();
-        this.grupoDAO = new GrupoDAO();
-        this.historialDAO = new HistorialSolicitudDAO();
     }
 
-    public void bloquearCupo(List<String> params) throws SQLException {
-        if (params.size() < 4) {
+    public BloqueoGrupo bloquearCupo(List<String> params, int idAutorizador)
+            throws SQLException {
+        if (params == null || params.size() < 4) {
             throw new IllegalArgumentException(
-                    "Formato: bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador?"
-            );
-        }
-        int idGrupo = Integer.parseInt(params.get(0).trim());
-        int idSol = Integer.parseInt(params.get(1).trim());
-        int cantidad = Integer.parseInt(params.get(2).trim());
-        String motivo = params.get(3).trim();
-        Integer idAutorizador = params.size() > 4 ? Integer.parseInt(params.get(4).trim()) : null;
-
-        // Descontar de los cupos disponibles del grupo
-        boolean exito = grupoDAO.descontarCupo(idGrupo, cantidad);
-        if (!exito) {
-            throw new SQLException("No hay cupos suficientes disponibles en el grupo " + idGrupo + " para realizar el bloqueo.");
+                    "Formato: bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo. "
+                    + "El autorizador se identifica con la sesión activa.");
         }
 
-        BloqueoGrupo bg = new BloqueoGrupo();
-        bg.setIdGrupo(idGrupo);
-        bg.setIdSolicitud(idSol);
-        bg.setCantidad(cantidad);
-        bg.setMotivo(motivo);
-        bg.setEstado("RESERVADO");
-        bg.setAutorizadoPor(idAutorizador);
-        bg.setObservacion("Cupo reservado por caso especial.");
+        int idGrupo = parsePositiveInt(params.get(0), "ID del grupo");
+        int idSolicitud = parsePositiveInt(params.get(1), "ID de la solicitud");
+        int cantidad = parsePositiveInt(params.get(2), "cantidad de cupos");
 
-        bloqueoDAO.create(bg);
+        int endMotivo = params.size();
+        if (params.size() >= 5 && esNumero(params.get(params.size() - 1))) {
+            endMotivo--;
+        }
+        String motivo = String.join(", ", params.subList(3, endMotivo)).trim();
+        if (motivo.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Debe indicar el motivo del bloqueo.");
+        }
 
-        // Registrar en historial si hay solicitud
-        HistorialSolicitud hist = new HistorialSolicitud();
-        hist.setIdSolicitud(idSol);
-        hist.setIdUsuario(idAutorizador);
-        hist.setEstadoAnterior("APROBADA_DIRECCION");
-        hist.setEstadoNuevo("CUPO_RESERVADO");
-        hist.setAccion("BLOQUEO_CUPO");
-        hist.setObservacion("Se reservaron " + cantidad + " cupos en el grupo " + idGrupo + " por: " + motivo);
-        historialDAO.create(hist);
+        BloqueoGrupo bloqueo = new BloqueoGrupo();
+        bloqueo.setIdGrupo(idGrupo);
+        bloqueo.setIdSolicitud(idSolicitud);
+        bloqueo.setCantidad(cantidad);
+        bloqueo.setMotivo(motivo);
+        bloqueo.setEstado("RESERVADO");
+        bloqueo.setAutorizadoPor(idAutorizador);
+        bloqueo.setObservacion("Cupo reservado por caso especial.");
+        bloqueoDAO.bloquearCupo(bloqueo);
+        return bloqueo;
     }
 
-    public void liberarCupo(List<String> params) throws SQLException {
-        if (params.size() < 2) {
-            throw new IllegalArgumentException("Formato: bloqueo_grupo liberar id_bloqueo,observacion");
-        }
-        int idBloqueo = Integer.parseInt(params.get(0).trim());
-        String obs = params.get(1).trim();
-
-        BloqueoGrupo bg = bloqueoDAO.readById(idBloqueo);
-        if (bg == null) {
-            throw new SQLException("El bloqueo con id " + idBloqueo + " no existe.");
+    public BloqueoGrupo liberarCupo(List<String> params, int idAutorizador)
+            throws SQLException {
+        if (params == null || params.size() < 2) {
+            throw new IllegalArgumentException(
+                    "Formato: bloqueo_grupo liberar id_bloqueo,observacion.");
         }
 
-        if (!"RESERVADO".equalsIgnoreCase(bg.getEstado())) {
-            throw new SQLException("El bloqueo ya no esta en estado RESERVADO (estado actual: " + bg.getEstado() + ").");
+        int idBloqueo = parsePositiveInt(params.get(0), "ID del bloqueo");
+        String observacion = String.join(", ", params.subList(1, params.size())).trim();
+        if (observacion.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Debe indicar el motivo u observación de la liberación.");
         }
 
-        // Reintegrar cupos al grupo
-        grupoDAO.liberarCupo(bg.getIdGrupo(), bg.getCantidad());
-        bloqueoDAO.liberarBloqueo(idBloqueo, obs);
-
-        if (bg.getIdSolicitud() != null) {
-            HistorialSolicitud hist = new HistorialSolicitud();
-            hist.setIdSolicitud(bg.getIdSolicitud());
-            hist.setEstadoAnterior("CUPO_RESERVADO");
-            hist.setEstadoNuevo("CUPO_LIBERADO");
-            hist.setAccion("LIBERACION_CUPO");
-            hist.setObservacion("Se liberaron los cupos bloqueados: " + obs);
-            historialDAO.create(hist);
-        }
+        return bloqueoDAO.liberarCupo(idBloqueo, observacion, idAutorizador);
     }
 
     public List<String[]> listarBloqueos() throws SQLException {
@@ -99,7 +72,30 @@ public class BloqueoGrupoService {
     public String getComandosBloqueo() {
         return "Comandos CU4 - Bloqueo y Control de Cupos:\n" +
                 "- bloqueo_grupo listar\n" +
-                "- bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador\n" +
-                "- bloqueo_grupo liberar id_bloqueo,observacion";
+                "- bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo\n" +
+                "- bloqueo_grupo liberar id_bloqueo,observacion\n" +
+                "El director o académico se identifica mediante la sesión activa.";
+    }
+
+    private int parsePositiveInt(String valor, String nombre) {
+        int resultado;
+        try {
+            resultado = Integer.parseInt(valor.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(nombre + " debe ser un número entero.", ex);
+        }
+        if (resultado <= 0) {
+            throw new IllegalArgumentException(nombre + " debe ser mayor que cero.");
+        }
+        return resultado;
+    }
+
+    private boolean esNumero(String valor) {
+        try {
+            Integer.parseInt(valor.trim());
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
     }
 }

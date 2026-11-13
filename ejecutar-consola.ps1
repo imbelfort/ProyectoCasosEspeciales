@@ -4,6 +4,15 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $lib = Join-Path $root "lib"
 $classes = Join-Path $root "build\classes"
 
+# Configuracion institucional del servidor del ingeniero.
+$env:MAIL_HOST = "mail.tecnoweb.org.bo"
+$env:MAIL_SMTP_PORT = "25"
+$env:MAIL_POP3_PORT = "110"
+$env:MAIL_IMAP_PORT = "143"
+$env:MAIL_USER = "grupo01sa"
+$env:MAIL_PASSWORD = "grup001grup001*"
+$env:MAIL_ADDRESS = "grupo01sa@tecnoweb.org.bo"
+
 $dependencies = @{
     "activation-1.1.1.jar" = "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
     "gson-2.8.2.jar" = "https://repo1.maven.org/maven2/com/google/code/gson/gson/2.8.2/gson-2.8.2.jar"

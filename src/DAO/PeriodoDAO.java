@@ -44,4 +44,15 @@ public class PeriodoDAO {
         }
         return lista;
     }
+
+    public Integer findIdByGestion(String gestion) throws SQLException {
+        String sql = "SELECT id FROM periodos WHERE LOWER(gestion) = LOWER(?)";
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, gestion.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt("id") : null;
+            }
+        }
+    }
 }

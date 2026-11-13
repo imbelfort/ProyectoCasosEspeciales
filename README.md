@@ -17,3 +17,34 @@ cada mensaje recibido.
 
 Al iniciar, la consola también muestra el estado de PostgreSQL, SMTP, POP3 e
 IMAP, incluyendo el host, puerto, saludo del servidor o el error de conexión.
+
+## Probar sin servidor del docente (Docker + GreenMail)
+
+Este modo no cambia la lógica del sistema: solo cambia host/puertos/credenciales
+de correo por variables de entorno.
+
+1) Iniciar entorno local y ejecutar la consola:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\ejecutar-consola-local-docker.ps1
+```
+
+2) En otra terminal, enviar un comando de prueba al buzón local:
+
+```powershell
+.\enviar-comando-prueba.ps1 -Subject "usuario listar"
+```
+
+Opcionalmente puedes enviar otros comandos:
+
+```powershell
+.\enviar-comando-prueba.ps1 -Subject "help"
+.\enviar-comando-prueba.ps1 -Subject "grupo listar"
+```
+
+3) Para apagar GreenMail:
+
+```powershell
+docker compose -f .\docker-compose.greenmail.yml down
+```

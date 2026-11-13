@@ -62,13 +62,13 @@ public class ErrorExplainer {
             "usuario", "rol", "estudiante", "personal_carrera", "director_carrera",
             "carrera", "periodo", "materia", "grupo", "solicitud", "solicitud_grupo",
             "archivo_solicitud", "evaluacion", "bloqueo_grupo", "oficio_cpd",
-            "respuesta_cpd", "historial", "notificacion", "reporte", "help"
+            "respuesta_cpd", "historial", "notificacion", "reporte", "pago", "help"
     };
 
     private static final String[] ACCIONES_VALIDAS = {
             "listar", "agregar", "modificar", "eliminar", "consultar", "registrar",
             "evaluar", "bloquear", "liberar", "asignar", "mis_casos", "pendientes",
-            "general", "estados", "periodos", "cupos", "help"
+            "general", "estados", "periodos", "cupos", "mis_pagos", "oficios", "help"
     };
 
     /**
@@ -105,9 +105,9 @@ public class ErrorExplainer {
             } else if (rawMsg.contains("Decision invalida")) {
                 ed.setTitulo("Valor de Decisión No Permitido");
                 ed.setQueFallo("La decisión indicada no es válida. Las únicas decisiones aceptadas por Dirección de Carrera son: <b>APROBADA</b>, <b>RECHAZADA</b> u <b>OBSERVADA</b>.");
-            } else if (rawMsg.contains("Resultado invalido") || rawMsg.contains("resultado")) {
+            } else if (rawMsg.toLowerCase(Locale.ROOT).contains("resultado")) {
                 ed.setTitulo("Resultado de CPD Inválido");
-                ed.setQueFallo("El resultado indicado no es válido. Los resultados oficiales de CPD son: <b>HABILITADA</b>, <b>CONFIRMADA_CPD</b>, <b>OBSERVADA_CPD</b> o <b>RECHAZADA_CPD</b>.");
+                ed.setQueFallo("El resultado debe ser <b>HABILITADO</b>, <b>OBSERVADO</b> o <b>RECHAZADO</b>. Use <b>cpd responder id_oficio,id_solicitud,resultado,codigo_respuesta,observacion</b>.");
             } else {
                 ed.setQueFallo(rawMsg);
             }
@@ -252,6 +252,7 @@ public class ErrorExplainer {
         if ("evaluaciones".equals(token) || "evaluar".equals(token)) return "evaluacion";
         if ("oficios".equals(token) || "oficio".equals(token)) return "oficio_cpd";
         if ("respuestas".equals(token) || "respuesta".equals(token)) return "respuesta_cpd";
+        if ("cpd".equals(token)) return "respuesta_cpd";
         if ("reportes".equals(token)) return "reporte";
         if ("notificaciones".equals(token)) return "notificacion";
         if ("ayuda".equals(token) || "manual".equals(token) || "info".equals(token)) return "help";
@@ -311,40 +312,27 @@ public class ErrorExplainer {
 
         if ("solicitud".equals(ent)) {
             if ("registrar".equals(act) || "agregar".equals(act)) {
-                ed.setSintaxisCorrecta("solicitud registrar id_estudiante,id_periodo,tipo_caso,motivo");
+                ed.setSintaxisCorrecta("enviar solicitud gestion,tipo_caso,motivo");
                 ed.setEjemploReal("solicitud registrar 1, 1, CORRECCION_NOTA, Error en acta final de calificaciones");
                 ed.addParametro("id_estudiante", "Número Entero", "ID único del estudiante en el sistema");
-                ed.addParametro("id_periodo", "Número Entero", "ID de la gestión académica (ej. 1 para 1-2026)");
+                ed.addParametro("gestion", "Texto", "Gestión académica con formato 1-2026 o 2-2026");
                 ed.addParametro("tipo_caso", "Texto", "Tipo de solicitud (ej. CORRECCION_NOTA, LEVANTE_REQUISITO, INCLUSION_MATERIA)");
                 ed.addParametro("motivo", "Texto", "Explicación y justificativo académico del caso especial");
             } else if ("consultar".equals(act)) {
                 ed.setSintaxisCorrecta("solicitud consultar id_solicitud");
                 ed.setEjemploReal("solicitud consultar 1");
                 ed.addParametro("id_solicitud", "Número Entero", "ID de la solicitud que desea consultar");
+            } else if ("periodos".equals(act)) {
+                ed.setSintaxisCorrecta("solicitud periodos id_periodo_o_gestion");
+                ed.setEjemploReal("solicitud periodos 2-2026");
+                ed.addParametro("id_periodo_o_gestion", "ID o gestión", "Período académico que desea consultar");
             } else {
-                ed.setSintaxisCorrecta("solicitud listar | solicitud mis_casos | solicitud registrar ... | solicitud consultar id");
-                ed.setEjemploReal("solicitud mis_casos");
+                ed.setSintaxisCorrecta("solicitud periodos id_periodo_o_gestion | solicitud consultar id_solicitud");
+                ed.setEjemploReal("solicitud periodos 2-2026");
             }
         } else if ("usuario".equals(ent)) {
-            if ("agregar".equals(act)) {
-                ed.setSintaxisCorrecta("usuario agregar nombre,apellidos,ci,email,telefono,direccion,fecha_nac(yyyy-MM-dd),password");
-                ed.setEjemploReal("usuario agregar Carlos,Perez Rojas,7891234,carlos@uagrm.edu.bo,70012345,Av Busch 2do Anillo,1998-04-15,Pass1234");
-                ed.addParametro("nombre", "Texto", "Nombres del usuario");
-                ed.addParametro("apellidos", "Texto", "Apellidos paterno y materno");
-                ed.addParametro("ci", "Texto / Número", "Cédula de identidad");
-                ed.addParametro("email", "Correo electrónico", "Correo válido institucional o personal");
-                ed.addParametro("telefono", "Número", "Teléfono o celular de contacto");
-                ed.addParametro("direccion", "Texto", "Dirección de domicilio");
-                ed.addParametro("fecha_nac", "Fecha (AAAA-MM-DD)", "Fecha de nacimiento en formato estándar ISO");
-                ed.addParametro("password", "Texto", "Contraseña inicial de acceso");
-            } else if ("eliminar".equals(act)) {
-                ed.setSintaxisCorrecta("usuario eliminar id");
-                ed.setEjemploReal("usuario eliminar 5");
-                ed.addParametro("id", "Número Entero", "ID del usuario a eliminar");
-            } else {
-                ed.setSintaxisCorrecta("usuario listar | usuario agregar ... | usuario modificar ... | usuario eliminar id");
-                ed.setEjemploReal("usuario listar");
-            }
+            ed.setSintaxisCorrecta("usuario listar");
+            ed.setEjemploReal("usuario listar");
         } else if ("estudiante".equals(ent)) {
             if ("agregar".equals(act)) {
                 ed.setSintaxisCorrecta("estudiante agregar id_usuario,registro_universitario,id_carrera,semestre_actual");
@@ -389,12 +377,11 @@ public class ErrorExplainer {
             }
         } else if ("evaluacion".equals(ent)) {
             if ("registrar".equals(act) || "evaluar".equals(act)) {
-                ed.setSintaxisCorrecta("evaluacion registrar id_solicitud,id_evaluador,decision,justificacion[,observaciones]");
-                ed.setEjemploReal("evaluacion registrar 1, 1, APROBADA, Cumple con requisitos academicos, Remitir a CPD");
+                ed.setSintaxisCorrecta("evaluacion registrar id_solicitud,APROBADA|RECHAZADA,motivo[,observaciones]");
+                ed.setEjemploReal("evaluacion registrar 1,APROBADA,Cumple con los requisitos academicos,Remitir a CPD");
                 ed.addParametro("id_solicitud", "Número Entero", "ID de la solicitud evaluada");
-                ed.addParametro("id_evaluador", "Número Entero", "ID del director o personal evaluador");
-                ed.addParametro("decision", "Enum (APROBADA|RECHAZADA|OBSERVADA)", "Resolución de Dirección de Carrera");
-                ed.addParametro("justificacion", "Texto", "Justificación formal del dictamen");
+                ed.addParametro("decision", "Enum (APROBADA|RECHAZADA)", "Resolución de Dirección de Carrera");
+                ed.addParametro("motivo", "Texto", "Motivo obligatorio del dictamen");
                 ed.addParametro("observaciones", "Texto (Opcional)", "Instrucciones o notas adicionales");
             } else {
                 ed.setSintaxisCorrecta("evaluacion listar | evaluacion registrar ...");
@@ -402,21 +389,30 @@ public class ErrorExplainer {
             }
         } else if ("bloqueo_grupo".equals(ent)) {
             if ("bloquear".equals(act) || "agregar".equals(act)) {
-                ed.setSintaxisCorrecta("bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador");
-                ed.setEjemploReal("bloqueo_grupo bloquear 1, 1, 1, Reserva de cupo para caso aprobado, 2");
+                ed.setSintaxisCorrecta("bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo");
+                ed.setEjemploReal("bloqueo_grupo bloquear 1,1,1,Reserva de cupo para caso aprobado");
             } else if ("liberar".equals(act)) {
                 ed.setSintaxisCorrecta("bloqueo_grupo liberar id_bloqueo,observacion");
-                ed.setEjemploReal("bloqueo_grupo liberar 1, Estudiante regularizo inscripcion por ventanilla");
+                ed.setEjemploReal("bloqueo_grupo liberar 1, Estudiante regularizó inscripción por ventanilla");
             } else {
                 ed.setSintaxisCorrecta("bloqueo_grupo listar | bloqueo_grupo bloquear ... | bloqueo_grupo liberar ...");
                 ed.setEjemploReal("bloqueo_grupo listar");
             }
         } else if ("oficio_cpd".equals(ent)) {
-            ed.setSintaxisCorrecta("oficio_cpd generar id_solicitud,destinatario,referencia,detalle,id_responsable");
-            ed.setEjemploReal("oficio_cpd generar 1, Ing. Roberto Lopez Director CPD, Habilitacion cupo especial, Solicitud con resolucion favorable, 1");
+            ed.setSintaxisCorrecta(
+                    "oficio_cpd remitir gestion,correo_cpd,referencia,detalle | "
+                    + "oficio_cpd listar | oficio_cpd generar id_oficio_pendiente");
+            ed.setEjemploReal(
+                    "oficio_cpd remitir 2-2026,cpd@uagrm.edu.bo,Habilitacion de casos especiales, "
+                    + "Solicitudes aceptadas con comprobante de pago");
         } else if ("respuesta_cpd".equals(ent)) {
-            ed.setSintaxisCorrecta("respuesta_cpd registrar id_oficio,id_solicitud,resultado,referencia_respaldo,observaciones,id_responsable");
-            ed.setEjemploReal("respuesta_cpd registrar 1, 1, HABILITADA, SIS-CPD-2026-089, Materia adicionada en sistema, 2");
+            ed.setSintaxisCorrecta(
+                    "cpd pendientes | oficio_cpd consultar id_oficio | "
+                    + "cpd responder id_oficio,id_solicitud,"
+                    + "HABILITADO|OBSERVADO|RECHAZADO,codigo_respuesta,observacion");
+            ed.setEjemploReal(
+                    "cpd responder 5,25,HABILITADO,CPD-2026-0015,"
+                    + "Algebra I habilitada e inscrita correctamente");
         } else if ("historial".equals(ent)) {
             ed.setSintaxisCorrecta("historial listar | historial consultar id_solicitud");
             ed.setEjemploReal("historial consultar 1");

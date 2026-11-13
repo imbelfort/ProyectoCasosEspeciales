@@ -10,23 +10,87 @@ import java.util.List;
 public class SolicitudDAO {
 
     public void create(Solicitud sol) throws SQLException {
-        String sql = "INSERT INTO solicitud (codigo, id_estudiante, id_periodo, tipo_caso, motivo, estado, " +
+        String sql = "INSERT INTO solicitud (id, codigo, id_estudiante, id_periodo, tipo_caso, motivo, estado, " +
                      "fecha_solicitud, fecha_revision, id_revisor, motivo_rechazo, observaciones) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, NULL, NULL, ?) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, NULL, NULL, ?) " +
                      "RETURNING id";
         try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, sol.getCodigo());
-            ps.setInt(2, sol.getIdEstudiante());
-            ps.setInt(3, sol.getIdPeriodo());
-            ps.setString(4, sol.getTipoCaso());
-            ps.setString(5, sol.getMotivo());
-            ps.setString(6, sol.getEstado() != null ? sol.getEstado() : "ENVIADA");
-            ps.setString(7, sol.getObservaciones());
+             PreparedStatement sequence = con.prepareStatement(
+                     "SELECT nextval(pg_get_serial_sequence('solicitud', 'id'))")) {
+            long id;
+            try (ResultSet rs = sequence.executeQuery()) {
+                if (!rs.next()) {
+                    throw new SQLException("No se pudo generar el identificador de la solicitud.");
+                }
+                id = rs.getLong(1);
+            }
 
+            String codigo = sol.getCodigo();
+            if (codigo == null || codigo.trim().isEmpty()) {
+                codigo = "CE-" + java.time.Year.now().getValue() + "-"
+                        + String.format("%04d", id);
+                sol.setCodigo(codigo);
+            }
+
+            try (PreparedStatement ps = con.prepareStatement(sql)) {
+                ps.setLong(1, id);
+                ps.setString(2, codigo);
+                ps.setInt(3, sol.getIdEstudiante());
+                ps.setInt(4, sol.getIdPeriodo());
+                ps.setString(5, sol.getTipoCaso());
+                ps.setString(6, sol.getMotivo());
+                ps.setString(7, sol.getEstado() != null ? sol.getEstado() : "ENVIADA");
+                ps.setString(8, sol.getObservaciones());
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        sol.setId(rs.getInt(1));
+                    }
+                }
+            }
+        }
+    }
+
+    public void validarSolicitudEditable(int idSolicitud, int idEstudiante)
+            throws SQLException {
+        String sql = "SELECT id_estudiante, estado FROM solicitud WHERE id = ?";
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, idSolicitud);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    sol.setId(rs.getInt(1));
+                if (!rs.next()) {
+                    throw new IllegalArgumentException(
+                            "No existe la solicitud con ID " + idSolicitud + ".");
+                }
+                if (rs.getInt("id_estudiante") != idEstudiante) {
+                    throw new IllegalArgumentException(
+                            "La solicitud no pertenece al estudiante remitente.");
+                }
+                if (!"ENVIADA".equalsIgnoreCase(rs.getString("estado"))) {
+                    throw new IllegalArgumentException(
+                            "Solo se pueden modificar solicitudes que aún estén en estado ENVIADA.");
+                }
+            }
+        }
+    }
+
+    public void validarSolicitudAceptadaParaPago(int idSolicitud, int idEstudiante)
+            throws SQLException {
+        String sql = "SELECT estado FROM solicitud " +
+                     "WHERE id = ? AND id_estudiante = ?";
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, idSolicitud);
+            ps.setInt(2, idEstudiante);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException(
+                            "La solicitud no existe o no pertenece al estudiante remitente.");
+                }
+                if (!"APROBADA_DIRECCION".equalsIgnoreCase(rs.getString("estado"))) {
+                    throw new IllegalArgumentException(
+                            "El comprobante solo puede adjuntarse a una solicitud aceptada "
+                            + "por Dirección.");
                 }
             }
         }
@@ -62,7 +126,57 @@ public class SolicitudDAO {
         return lista;
     }
 
+    public List<String[]> listByPeriodo(String periodo) throws SQLException {
+        String referencia = periodo == null ? "" : periodo.trim();
+        if (referencia.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Indique el ID del período o su gestión, por ejemplo 2-2026.");
+        }
+
+        String sql = "SELECT s.id, s.codigo, u.nombre || ' ' || u.apellidos AS estudiante, " +
+                     "e.registro_universitario, p.gestion, s.tipo_caso, s.estado, " +
+                     "s.fecha_solicitud, s.motivo " +
+                     "FROM solicitud s " +
+                     "JOIN estudiantes e ON s.id_estudiante = e.id_estudiante " +
+                     "JOIN usuario u ON e.id_estudiante = u.id_usuario " +
+                     "JOIN periodos p ON s.id_periodo = p.id " +
+                     "WHERE CAST(p.id AS TEXT) = ? OR LOWER(p.gestion) = LOWER(?) " +
+                     "ORDER BY s.fecha_solicitud DESC, s.id DESC";
+        List<String[]> lista = new ArrayList<>();
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, referencia);
+            ps.setString(2, referencia);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(new String[]{
+                            String.valueOf(rs.getInt("id")),
+                            rs.getString("codigo"),
+                            rs.getString("estudiante"),
+                            rs.getString("registro_universitario"),
+                            rs.getString("gestion"),
+                            rs.getString("tipo_caso"),
+                            rs.getString("estado"),
+                            rs.getTimestamp("fecha_solicitud") != null
+                                    ? rs.getTimestamp("fecha_solicitud").toString() : "",
+                            rs.getString("motivo") != null ? rs.getString("motivo") : ""
+                    });
+                }
+            }
+        }
+        return lista;
+    }
+
     public String[] readById(int id) throws SQLException {
+        return readById(id, null);
+    }
+
+    public String[] readByIdForEstudiante(int id, int idEstudiante)
+            throws SQLException {
+        return readById(id, idEstudiante);
+    }
+
+    private String[] readById(int id, Integer idEstudiante) throws SQLException {
         String sql = "SELECT s.id, s.codigo, u.nombre || ' ' || u.apellidos AS estudiante, " +
                      "e.registro_universitario, p.gestion, s.tipo_caso, s.estado, " +
                      "s.fecha_solicitud, s.motivo, s.observaciones, s.motivo_rechazo " +
@@ -70,10 +184,14 @@ public class SolicitudDAO {
                      "JOIN estudiantes e ON s.id_estudiante = e.id_estudiante " +
                      "JOIN usuario u ON e.id_estudiante = u.id_usuario " +
                      "JOIN periodos p ON s.id_periodo = p.id " +
-                     "WHERE s.id = ?";
+                     "WHERE s.id = ?" +
+                     (idEstudiante == null ? "" : " AND s.id_estudiante = ?");
         try (Connection con = Conexion.getInstancia().EstablecerConexion();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, id);
+            if (idEstudiante != null) {
+                ps.setInt(2, idEstudiante);
+            }
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return new String[]{

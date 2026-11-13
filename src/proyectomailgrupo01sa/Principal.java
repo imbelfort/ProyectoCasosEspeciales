@@ -24,8 +24,7 @@ public class Principal extends javax.swing.JFrame {
         System.out.println("Inicializando base de datos...");
 
         try {
-            InicializarDB.crearTablasSiNoExisten();
-            InicializarDB.insertarDatosIniciales();
+            InicializarDB.inicializarSistema();
 
             System.out.println("[OK] Base de datos inicializada correctamente");
         } catch (Exception e) {

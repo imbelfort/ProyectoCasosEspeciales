@@ -60,28 +60,6 @@ public class GrupoDAO {
         return lista;
     }
 
-    public boolean descontarCupo(int idGrupo, int cantidad) throws SQLException {
-        String sql = "UPDATE grupo SET cupos_disponibles = cupos_disponibles - ? " +
-                     "WHERE id = ? AND cupos_disponibles >= ?";
-        try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, cantidad);
-            ps.setInt(2, idGrupo);
-            ps.setInt(3, cantidad);
-            return ps.executeUpdate() > 0;
-        }
-    }
-
-    public void liberarCupo(int idGrupo, int cantidad) throws SQLException {
-        String sql = "UPDATE grupo SET cupos_disponibles = cupos_disponibles + ? WHERE id = ?";
-        try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, cantidad);
-            ps.setInt(2, idGrupo);
-            ps.executeUpdate();
-        }
-    }
-
     public String[] readById(int idGrupo) throws SQLException {
         String sql = "SELECT g.id, m.sigla AS materia, p.gestion, g.sigla_grupo, g.docente, " +
                      "g.cupo_maximo, g.cupos_disponibles, g.cupo_excepcional_maximo, g.estado " +

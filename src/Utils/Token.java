@@ -32,6 +32,7 @@ public class Token {
     public static final int HISTORIAL = 117;
     public static final int NOTIFICACION = 118;
     public static final int REPORTE = 119;
+    public static final int PAGO = 120;
 
     // Acciones (200 - 299)
     public static final int ELIMINAR = 200;
@@ -56,6 +57,8 @@ public class Token {
     public static final int CUPOS = 219;
     public static final int MIS_CASOS = 220;
     public static final int PENDIENTES = 221;
+    public static final int REMITIR = 222;
+    public static final int OFICIOS = 223;
 
     public static final int ERROR_COMMAND = 300;
     public static final int ERROR_CHARACTER = 301;
@@ -83,9 +86,11 @@ public class Token {
     public static final String LEXEME_BLOQUEO_GRUPO = "bloqueo_grupo";
     public static final String LEXEME_OFICIO_CPD = "oficio_cpd";
     public static final String LEXEME_RESPUESTA_CPD = "respuesta_cpd";
+    public static final String LEXEME_CPD = "cpd";
     public static final String LEXEME_HISTORIAL = "historial";
     public static final String LEXEME_NOTIFICACION = "notificacion";
     public static final String LEXEME_REPORTE = "reporte";
+    public static final String LEXEME_PAGO = "pago";
 
     public static final String LEXEME_ELIMINAR = "eliminar";
     public static final String LEXEME_MODIFICAR = "modificar";
@@ -96,6 +101,7 @@ public class Token {
     public static final String LEXEME_CONSULTAR = "consultar";
     public static final String LEXEME_HELP = "help";
     public static final String LEXEME_REGISTRAR = "registrar";
+    public static final String LEXEME_RESPONDER = "responder";
     public static final String LEXEME_EVALUAR = "evaluar";
     public static final String LEXEME_APROBAR = "aprobar";
     public static final String LEXEME_RECHAZAR = "rechazar";
@@ -109,6 +115,8 @@ public class Token {
     public static final String LEXEME_CUPOS = "cupos";
     public static final String LEXEME_MIS_CASOS = "mis_casos";
     public static final String LEXEME_PENDIENTES = "pendientes";
+    public static final String LEXEME_REMITIR = "remitir";
+    public static final String LEXEME_OFICIOS = "oficios";
 
     public static final String LEXEME_ERROR_COMMAND = "UNKNOWN COMMAND";
     public static final String LEXEME_ERROR_CHARACTER = "UNKNOWN CHARACTER";
@@ -203,6 +211,7 @@ public class Token {
             case HISTORIAL: return LEXEME_HISTORIAL;
             case NOTIFICACION: return LEXEME_NOTIFICACION;
             case REPORTE: return LEXEME_REPORTE;
+            case PAGO: return LEXEME_PAGO;
 
             case ELIMINAR: return LEXEME_ELIMINAR;
             case MODIFICAR: return LEXEME_MODIFICAR;
@@ -226,6 +235,8 @@ public class Token {
             case CUPOS: return LEXEME_CUPOS;
             case MIS_CASOS: return LEXEME_MIS_CASOS;
             case PENDIENTES: return LEXEME_PENDIENTES;
+            case REMITIR: return LEXEME_REMITIR;
+            case OFICIOS: return LEXEME_OFICIOS;
 
             case ERROR_COMMAND: return LEXEME_ERROR_COMMAND;
             case ERROR_CHARACTER: return LEXEME_ERROR_CHARACTER;
@@ -264,9 +275,11 @@ public class Token {
             case LEXEME_BLOQUEO_GRUPO: return BLOQUEO_GRUPO;
             case LEXEME_OFICIO_CPD: return OFICIO_CPD;
             case LEXEME_RESPUESTA_CPD: return RESPUESTA_CPD;
+            case LEXEME_CPD: return RESPUESTA_CPD;
             case LEXEME_HISTORIAL: return HISTORIAL;
             case LEXEME_NOTIFICACION: return NOTIFICACION;
             case LEXEME_REPORTE: return REPORTE;
+            case LEXEME_PAGO: return PAGO;
 
             case LEXEME_ELIMINAR: return ELIMINAR;
             case LEXEME_MODIFICAR: return MODIFICAR;
@@ -277,6 +290,7 @@ public class Token {
             case LEXEME_CONSULTAR: return CONSULTAR;
             case LEXEME_HELP: return HELP;
             case LEXEME_REGISTRAR: return REGISTRAR;
+            case LEXEME_RESPONDER: return REGISTRAR;
             case LEXEME_EVALUAR: return EVALUAR;
             case LEXEME_APROBAR: return APROBAR;
             case LEXEME_RECHAZAR: return RECHAZAR;
@@ -290,6 +304,8 @@ public class Token {
             case LEXEME_CUPOS: return CUPOS;
             case LEXEME_MIS_CASOS: return MIS_CASOS;
             case LEXEME_PENDIENTES: return PENDIENTES;
+            case LEXEME_REMITIR: return REMITIR;
+            case LEXEME_OFICIOS: return OFICIOS;
 
             case LEXEME_ERROR_COMMAND: return ERROR_COMMAND;
             case LEXEME_ERROR_CHARACTER: return ERROR_CHARACTER;

@@ -91,6 +91,9 @@ public class Interpreter implements Runnable {
             case Token.ARCHIVO_SOLICITUD:
                 listener.archivoSolicitud(tokenEvent);
                 break;
+            case Token.PAGO:
+                listener.pago(tokenEvent);
+                break;
             case Token.EVALUACION:
                 listener.evaluacion(tokenEvent);
                 break;

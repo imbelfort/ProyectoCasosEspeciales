@@ -10,13 +10,37 @@ import java.util.List;
 public class PersonalCarreraDAO {
 
     public void create(PersonalCarrera personal) throws SQLException {
+        try (Connection con = Conexion.getInstancia().EstablecerConexion()) {
+            if (con == null) {
+                throw new SQLException("No se pudo conectar con PostgreSQL.");
+            }
+            create(con, personal);
+        }
+    }
+
+    public void create(Connection con, PersonalCarrera personal)
+            throws SQLException {
         String sql = "INSERT INTO personal_carrera (id_personal, cargo, carrera_id) VALUES (?, ?, ?)";
-        try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, personal.getIdPersonal());
             ps.setString(2, personal.getCargo());
             ps.setInt(3, personal.getIdCarrera());
             ps.executeUpdate();
+        }
+    }
+
+    public void update(Connection con, PersonalCarrera personal)
+            throws SQLException {
+        String sql = "UPDATE personal_carrera SET cargo = ?, carrera_id = ? " +
+                "WHERE id_personal = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, personal.getCargo());
+            ps.setInt(2, personal.getIdCarrera());
+            ps.setInt(3, personal.getIdPersonal());
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException(
+                        "No existe el perfil del académico indicado.");
+            }
         }
     }
 

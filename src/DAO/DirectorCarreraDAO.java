@@ -10,15 +10,40 @@ import java.util.List;
 public class DirectorCarreraDAO {
 
     public void create(DirectorCarrera director) throws SQLException {
+        try (Connection con = Conexion.getInstancia().EstablecerConexion()) {
+            if (con == null) {
+                throw new SQLException("No se pudo conectar con PostgreSQL.");
+            }
+            create(con, director);
+        }
+    }
+
+    public void create(Connection con, DirectorCarrera director)
+            throws SQLException {
         String sql = "INSERT INTO director_carrera (id_director, carrera_id, gestion_inicio, gestion_fin) " +
                      "VALUES (?, ?, ?, ?)";
-        try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, director.getIdDirector());
             ps.setInt(2, director.getIdCarrera());
             ps.setDate(3, director.getGestionInicio());
             ps.setDate(4, director.getGestionFin());
             ps.executeUpdate();
+        }
+    }
+
+    public void update(Connection con, DirectorCarrera director)
+            throws SQLException {
+        String sql = "UPDATE director_carrera SET carrera_id = ?, " +
+                "gestion_inicio = ?, gestion_fin = ? WHERE id_director = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, director.getIdCarrera());
+            ps.setDate(2, director.getGestionInicio());
+            ps.setDate(3, director.getGestionFin());
+            ps.setInt(4, director.getIdDirector());
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException(
+                        "No existe el perfil del director indicado.");
+            }
         }
     }
 

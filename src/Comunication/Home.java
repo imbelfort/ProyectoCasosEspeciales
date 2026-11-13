@@ -9,7 +9,9 @@ import Utils.Interpreter;
 import Utils.Token;
 import proyectomailgrupo01sa.Principal;
 
+import java.io.File;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import javax.swing.SwingUtilities;
 
@@ -35,7 +37,6 @@ public class Home {
 
         // Inicialización de Servicios para los 8 Casos de Uso
         final UsuarioService usuarioService = new UsuarioService();
-        final RolService rolService = new RolService();
         final EstudianteService estudianteService = new EstudianteService();
         final PersonalCarreraService personalCarreraService = new PersonalCarreraService();
         final DirectorCarreraService directorCarreraService = new DirectorCarreraService();
@@ -45,6 +46,7 @@ public class Home {
         final GrupoService grupoService = new GrupoService();
         final SolicitudService solicitudService = new SolicitudService();
         final ArchivoSolicitudService archivoSolicitudService = new ArchivoSolicitudService();
+        final PagoService pagoService = new PagoService();
         final EvaluacionService evaluacionService = new EvaluacionService();
         final BloqueoGrupoService bloqueoGrupoService = new BloqueoGrupoService();
         final OficioCpdService oficioCpdService = new OficioCpdService();
@@ -53,13 +55,83 @@ public class Home {
         final NotificacionService notificacionService = new NotificacionService();
         final ReporteService reporteService = new ReporteService();
 
-        String subjectText = email.getSubject() != null ? email.getSubject().trim() : "";
-        System.out.println("[COMANDO RECIBIDO] De: " + email.getFrom() + " | Subject: " + subjectText);
+        String subjectText = normalizarAliasCu2(
+                normalizarAsuntoComando(email.getSubject()));
+        String asuntoNormalizado = subjectText.toLowerCase(java.util.Locale.ROOT);
 
-        // Comando HELP global
-        if ("help".equalsIgnoreCase(subjectText) || "ayuda".equalsIgnoreCase(subjectText)) {
-            String menuAyuda = getMenuGeneralAyuda();
-            mostrarYEnviarHELP(email, respuesta, menuAyuda);
+        if ("help".equals(asuntoNormalizado)
+                || "ayuda".equals(asuntoNormalizado)
+                || asuntoNormalizado.equals("acceder ayuda")) {
+            String resultado = new ControlAccesoComandos().procesar(
+                    "acceder ayuda",
+                    email.getFrom(),
+                    email.getAttachmentFileName(),
+                    null);
+            enviarRespuestaControlAcceso(email, respuesta, resultado);
+            return;
+        }
+
+        if (asuntoNormalizado.startsWith("acceder ")
+                || asuntoNormalizado.startsWith("estudiante registrar ")
+                || asuntoNormalizado.startsWith("estudiante register ")
+                || asuntoNormalizado.startsWith("token ")
+                || esComandoCu1(asuntoNormalizado)) {
+            String resultado = new ControlAccesoComandos().procesar(
+                    subjectText,
+                    email.getFrom(),
+                    email.getAttachmentFileName(),
+                    null);
+            mostrarResultadoAccesoEnTerminal(subjectText, resultado);
+            enviarRespuestaControlAcceso(email, respuesta, resultado);
+            return;
+        }
+
+        final AccesoService.Contexto contextoComando;
+        if (!subjectText.isBlank()) {
+            try {
+                AccesoService accesoService = new AccesoService();
+                contextoComando =
+                        accesoService.validarPorRemitente(email.getFrom());
+                String[] partes = subjectText.split("\\s+", 3);
+                if (partes.length < 2) {
+                    throw new IllegalArgumentException(
+                            "El comando esta incompleto. Envia 'help' para ver opciones.");
+                }
+                accesoService.autorizar(
+                        contextoComando,
+                        partes[0],
+                        partes[1]);
+            } catch (SecurityException ex) {
+                registrarErrorComando(subjectText, ex.getMessage());
+                enviarRespuestaControlAcceso(
+                        email, respuesta, "ACCESO DENEGADO:\n" + ex.getMessage());
+                return;
+            } catch (IllegalArgumentException ex) {
+                registrarErrorComando(subjectText, ex.getMessage());
+                enviarRespuestaControlAcceso(
+                        email, respuesta, "ERROR DE VALIDACION:\n" + ex.getMessage());
+                return;
+            } catch (SQLException ex) {
+                registrarErrorComando(subjectText, ex.getMessage());
+                System.err.println("Error al validar la sesión de "
+                        + email.getFrom() + ":");
+                ex.printStackTrace(System.err);
+                enviarRespuestaControlAcceso(
+                        email,
+                        respuesta,
+                        "ERROR DEL SISTEMA:\nNo se pudo validar la sesión " +
+                        "contra la base de datos."
+                        + (ex.getSQLState() == null
+                                ? ""
+                                : " Código: " + ex.getSQLState() + "."));
+                return;
+            }
+        } else {
+            enviarRespuestaControlAcceso(
+                    email,
+                    respuesta,
+                    "ERROR DE VALIDACION:\nEl asunto del correo esta vacio. " +
+                    "Envia 'help' para consultar los comandos disponibles.");
             return;
         }
 
@@ -78,28 +150,8 @@ public class Home {
                             List<String[]> list = usuarioService.listarUsuarios();
                             enviarTabla(email, respuesta, "Lista de Usuarios", HtmlBuilder.HEADERS_USER, list);
                             break;
-                        case Token.AGREGAR:
-                            usuarioService.crearUsuario(event.getParams(), email.getAttachmentContentBase64());
-                            List<String[]> listAdd = usuarioService.listarUsuarios();
-                            enviarTabla(email, respuesta, "Usuario agregado exitosamente", HtmlBuilder.HEADERS_USER, listAdd);
-                            break;
-                        case Token.MODIFICAR:
-                            usuarioService.actualizarUsuario(event.getParams(), email.getAttachmentContentBase64());
-                            List<String[]> listMod = usuarioService.listarUsuarios();
-                            enviarTabla(email, respuesta, "Usuario modificado exitosamente", HtmlBuilder.HEADERS_USER, listMod);
-                            break;
-                        case Token.ELIMINAR:
-                            if (event.getParams().isEmpty()) throw new IllegalArgumentException("Debe especificar id: usuario eliminar id");
-                            int id = Integer.parseInt(event.getParams().get(0).trim());
-                            usuarioService.eliminarUsuario(id);
-                            List<String[]> listDel = usuarioService.listarUsuarios();
-                            enviarTabla(email, respuesta, "Usuario eliminado exitosamente", HtmlBuilder.HEADERS_USER, listDel);
-                            break;
-                        case Token.HELP:
-                            mostrarYEnviarHELP(email, respuesta, usuarioService.getComandosUsuario());
-                            break;
                         default:
-                            comandoDesconocido(email, respuesta, "usuario", "listar, agregar, modificar, eliminar, help");
+                            comandoDesconocido(email, respuesta, "usuario", "listar");
                     }
                 } catch (Exception ex) {
                     manejarExcepcion(email, respuesta, ex);
@@ -108,30 +160,9 @@ public class Home {
 
             @Override
             public void rol(TokenEvent event) {
-                try {
-                    switch (event.getAction()) {
-                        case Token.LISTAR:
-                            List<String[]> list = rolService.listarRoles();
-                            enviarTabla(email, respuesta, "Lista de Roles Institucionales", HtmlBuilder.HEADERS_ROL, list);
-                            break;
-                        case Token.AGREGAR:
-                            rolService.crearRol(event.getParams());
-                            List<String[]> listAdd = rolService.listarRoles();
-                            enviarTabla(email, respuesta, "Rol creado exitosamente", HtmlBuilder.HEADERS_ROL, listAdd);
-                            break;
-                        case Token.ASIGNAR:
-                            rolService.asignarRol(event.getParams());
-                            enviarExito(email, respuesta, "Asignacion de Rol", "Rol asignado correctamente al usuario.");
-                            break;
-                        case Token.HELP:
-                            mostrarYEnviarHELP(email, respuesta, rolService.getComandosRol());
-                            break;
-                        default:
-                            comandoDesconocido(email, respuesta, "rol", "listar, agregar, asignar, help");
-                    }
-                } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
-                }
+                comandoDesconocido(
+                        email, respuesta, "rol",
+                        "los roles se asignan automaticamente al crear perfiles");
             }
 
             @Override
@@ -215,33 +246,124 @@ public class Home {
                 try {
                     switch (event.getAction()) {
                         case Token.LISTAR:
-                            List<String[]> list = solicitudService.listarSolicitudes();
-                            enviarTabla(email, respuesta, "Solicitudes de Casos Especiales", HtmlBuilder.HEADERS_SOLICITUD, list);
+                            if (event.getParams().isEmpty()) {
+                                throw new IllegalArgumentException(
+                                        "Formato: solicitud listar período (ejemplo: solicitud listar 2-2026).");
+                            }
+                            String periodoListado = String.join(" ", event.getParams()).trim();
+                            List<String[]> list =
+                                    solicitudService.listarSolicitudesPorGestion(periodoListado);
+                            imprimirTablaConsola(
+                                    "CU3 - Solicitudes de Casos Especiales del período " + periodoListado,
+                                    HtmlBuilder.HEADERS_SOLICITUD, list);
+                            enviarTabla(email, respuesta,
+                                    "Solicitudes de Casos Especiales del período " + periodoListado,
+                                    HtmlBuilder.HEADERS_SOLICITUD, list);
+                            break;
+                        case Token.PERIODOS:
+                            if (event.getParams().isEmpty()) {
+                                throw new IllegalArgumentException(
+                                        "Formato: solicitud periodos id_periodo_o_gestion (ejemplo: solicitud periodos 2-2026).");
+                            }
+                            String periodo = String.join(" ", event.getParams()).trim();
+                            List<String[]> solicitudesPeriodo =
+                                    solicitudService.listarSolicitudesPorPeriodo(periodo);
+                            System.out.println("[CU3 - CONSULTA POR PERIODO] "
+                                    + solicitudesPeriodo.size() + " solicitud(es) encontradas "
+                                    + "para el período " + periodo + ".");
+                            imprimirTablaConsola(
+                                    "Solicitudes del período " + periodo,
+                                    HtmlBuilder.HEADERS_SOLICITUD, solicitudesPeriodo);
+                            enviarTabla(email, respuesta,
+                                    "Solicitudes del período " + periodo,
+                                    HtmlBuilder.HEADERS_SOLICITUD, solicitudesPeriodo);
                             break;
                         case Token.MIS_CASOS:
                             List<String[]> misCasos = solicitudService.listarMisCasos(email.getFrom(), event.getParams());
                             enviarTabla(email, respuesta, "Mis Solicitudes de Casos Especiales", HtmlBuilder.HEADERS_SOLICITUD, misCasos);
                             break;
                         case Token.PENDIENTES:
+                            if (!event.getParams().isEmpty()
+                                    && "listar".equalsIgnoreCase(event.getParams().get(0).trim())) {
+                                if (event.getParams().size() < 2) {
+                                    throw new IllegalArgumentException(
+                                            "Formato: solicitud pendientes listar,período "
+                                            + "(ejemplo: solicitud pendientes listar,2-2026).");
+                                }
+                                String periodoPendientes = String.join(" ",
+                                        event.getParams().subList(1, event.getParams().size())).trim();
+                                List<String[]> pendientesPeriodo =
+                                        solicitudService.listarSolicitudesPendientesPorPeriodo(
+                                                periodoPendientes);
+                                enviarTabla(email, respuesta,
+                                        "Solicitudes pendientes del período " + periodoPendientes,
+                                        HtmlBuilder.HEADERS_SOLICITUD, pendientesPeriodo);
+                                break;
+                            }
                             List<String[]> misPendientes = solicitudService.listarMisPendientes(email.getFrom(), event.getParams());
                             enviarTabla(email, respuesta, "Mis Solicitudes Pendientes", HtmlBuilder.HEADERS_SOLICITUD, misPendientes);
                             break;
                         case Token.REGISTRAR:
                         case Token.AGREGAR:
                             Solicitud sol = solicitudService.registrarSolicitud(event.getParams(), email.getFrom());
-                            List<String[]> listAdd = solicitudService.listarSolicitudes();
-                            enviarTabla(email, respuesta, "Solicitud registrada con codigo " + sol.getCodigo(), HtmlBuilder.HEADERS_SOLICITUD, listAdd);
+                            System.out.println("CU2 - Solicitud enviada exitosamente. Código: "
+                                    + sol.getCodigo() + ", ID: " + sol.getId()
+                                    + ", estado: " + sol.getEstado() + ".");
+                            List<String[]> listAdd = solicitudService.listarMisCasos(
+                                    email.getFrom(), java.util.Collections.emptyList());
+                            enviarTabla(email, respuesta, "Solicitud " + sol.getId()
+                                    + " registrada con codigo " + sol.getCodigo(),
+                                    HtmlBuilder.HEADERS_SOLICITUD, listAdd);
                             break;
                         case Token.CONSULTAR:
                             if (event.getParams().isEmpty()) throw new IllegalArgumentException("Formato: solicitud consultar id_solicitud");
                             int id = Integer.parseInt(event.getParams().get(0).trim());
-                            String[] solInfo = solicitudService.consultarSolicitud(id);
+                            AccesoService.Contexto contextoDetalle =
+                                    new AccesoService().validarPorRemitente(email.getFrom());
+                            String[] solInfo = contextoDetalle.tieneRol("ESTUDIANTE")
+                                    ? solicitudService.consultarSolicitudPropia(
+                                            id, email.getFrom())
+                                    : solicitudService.consultarSolicitud(id);
                             if (solInfo == null) {
-                                enviarErrorDetallado(email, respuesta, "Consulta Solicitud", "No se encontró ninguna solicitud con el ID: " + id, "Verifique el número de ID o consulte sus solicitudes con 'solicitud mis_casos'.");
+                                throw new IllegalArgumentException(
+                                        "No existe una solicitud con ID " + id + ".");
                             } else {
-                                java.util.ArrayList<String[]> solList = new java.util.ArrayList<String[]>();
-                                solList.add(solInfo);
-                                enviarTabla(email, respuesta, "Detalle de Solicitud " + solInfo[1], HtmlBuilder.HEADERS_SOLICITUD, solList);
+                                List<String[]> grupos =
+                                        solicitudService.listarGruposDeSolicitud(id);
+                                List<String[]> documentos =
+                                        archivoSolicitudService.listarArchivosDeSolicitud(id);
+                                List<String[]> evaluaciones =
+                                        evaluacionService.listarEvaluacionesSolicitud(id);
+                                System.out.println("[CU3 - DETALLE DE SOLICITUD] "
+                                        + "Expediente " + solInfo[1] + " consultado. "
+                                        + grupos.size() + " grupo(s), "
+                                        + documentos.size() + " documento(s), "
+                                        + evaluaciones.size() + " evaluación(es).");
+                                imprimirDetalleConsola(
+                                        solInfo, grupos, documentos, evaluaciones);
+                                String html = HtmlBuilder.generarDetalleSolicitud(
+                                        solInfo, grupos, documentos, evaluaciones);
+                                mostraRespuesta(html);
+                                if (email.getFrom() != null
+                                        && !email.getFrom().trim().isEmpty()) {
+                                    boolean puedeDescargar = contextoDetalle.tieneRol("DIRECTOR")
+                                            || contextoDetalle.tieneRol("PERSONAL_ACADEMICO");
+                                    List<File> archivos = puedeDescargar
+                                            ? archivoSolicitudService.obtenerArchivosDescargables(id)
+                                            : Collections.<File>emptyList();
+                                    if (archivos.isEmpty()) {
+                                        respuesta.sendmail(
+                                                email.getFrom(),
+                                                "Detalle de Solicitud " + solInfo[1],
+                                                html);
+                                    } else {
+                                        respuesta.sendmailWithAttachments(
+                                                email.getFrom(),
+                                                "Detalle de Solicitud " + solInfo[1],
+                                                html,
+                                                archivos);
+                                    }
+                                }
                             }
                             break;
                         case Token.HELP:
@@ -251,7 +373,15 @@ public class Home {
                             comandoDesconocido(email, respuesta, "solicitud", "listar, mis_casos, pendientes, registrar, consultar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    String contexto = event.getAction() == Token.REGISTRAR
+                            || event.getAction() == Token.AGREGAR
+                            ? "CU2 - Error al enviar la solicitud" : null;
+                    if (contexto == null && (event.getAction() == Token.PERIODOS
+                            || event.getAction() == Token.CONSULTAR
+                            || event.getAction() == Token.LISTAR)) {
+                        contexto = "CU3 - Error al consultar solicitudes";
+                    }
+                    manejarExcepcion(email, respuesta, ex, contexto);
                 }
             }
 
@@ -260,8 +390,19 @@ public class Home {
                 try {
                     switch (event.getAction()) {
                         case Token.AGREGAR:
-                            solicitudService.agregarGrupoASolicitud(event.getParams());
+                            solicitudService.agregarGrupoASolicitud(
+                                    event.getParams(), email.getFrom());
                             int idSol = Integer.parseInt(event.getParams().get(0).trim());
+                            if (event.getParams().size() >= 5) {
+                                System.out.println("CU2 - Materia/grupo agregado exitosamente. "
+                                        + "Solicitud ID: " + idSol + ", materia: "
+                                        + event.getParams().get(2).trim() + ", grupo: "
+                                        + event.getParams().get(3).trim() + ".");
+                            } else {
+                                System.out.println("CU2 - Materia/grupo agregado exitosamente. "
+                                        + "Solicitud ID: " + idSol + ", grupo ID: "
+                                        + event.getParams().get(1).trim() + ".");
+                            }
                             List<String[]> list = solicitudService.listarGruposDeSolicitud(idSol);
                             enviarTabla(email, respuesta, "Grupo agregado a la Solicitud ID " + idSol, HtmlBuilder.HEADERS_SOLICITUD_GRUPO, list);
                             break;
@@ -272,13 +413,18 @@ public class Home {
                             enviarTabla(email, respuesta, "Grupos relacionados a la Solicitud ID " + idS, HtmlBuilder.HEADERS_SOLICITUD_GRUPO, listG);
                             break;
                         case Token.HELP:
-                            mostrarYEnviarHELP(email, respuesta, "Comandos Solicitud-Grupo:\n- solicitud_grupo listar id_solicitud\n- solicitud_grupo agregar id_solicitud,id_grupo,motivo");
+                            mostrarYEnviarHELP(email, respuesta, "Comandos Solicitud-Grupo:\n- solicitud_grupo listar id_solicitud\n- solicitud_grupo agregar id_solicitud,periodo,sigla_materia,sigla_grupo,motivo");
                             break;
                         default:
                             comandoDesconocido(email, respuesta, "solicitud_grupo", "agregar, listar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    manejarExcepcion(
+                            email,
+                            respuesta,
+                            ex,
+                            event.getAction() == Token.AGREGAR
+                                    ? "CU2 - Error al agregar materia/grupo" : null);
                 }
             }
 
@@ -287,10 +433,20 @@ public class Home {
                 try {
                     switch (event.getAction()) {
                         case Token.AGREGAR:
-                            archivoSolicitudService.adjuntarArchivo(event.getParams());
+                            archivoSolicitudService.adjuntarArchivos(
+                                    event.getParams(), email.getFrom(), email.getAttachments());
                             int idSol = Integer.parseInt(event.getParams().get(0).trim());
+                            int cantidadAdjuntos = email.getAttachments() == null
+                                    ? 0 : email.getAttachments().size();
+                            if (cantidadAdjuntos == 0) {
+                                cantidadAdjuntos = 1;
+                            }
+
+                            System.out.println("CU2 - Documento(s) adjuntado(s) "
+                                    + "exitosamente. Solicitud ID: " + idSol
+                                    + ", cantidad: " + cantidadAdjuntos + ".");
                             List<String[]> list = archivoSolicitudService.listarArchivosDeSolicitud(idSol);
-                            enviarTabla(email, respuesta, "Documento adjuntado a la Solicitud ID " + idSol, HtmlBuilder.HEADERS_ARCHIVO_SOLICITUD, list);
+                            enviarTabla(email, respuesta, "Documento(s) adjuntado(s) a la Solicitud ID " + idSol, HtmlBuilder.HEADERS_ARCHIVO_SOLICITUD, list);
                             break;
                         case Token.LISTAR:
                             if (event.getParams().isEmpty()) throw new IllegalArgumentException("Formato: archivo_solicitud listar id_solicitud");
@@ -305,7 +461,55 @@ public class Home {
                             comandoDesconocido(email, respuesta, "archivo_solicitud", "agregar, listar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    manejarExcepcion(
+                            email,
+                            respuesta,
+                            ex,
+                            event.getAction() == Token.AGREGAR
+                                    ? "CU2 - Error al adjuntar documento(s)" : null);
+                }
+            }
+
+            @Override
+            public void pago(TokenEvent event) {
+                try {
+                    switch (event.getAction()) {
+                        case Token.AGREGAR:
+                            pagoService.adjuntarPago(
+                                    event.getParams(),
+                                    email.getFrom(),
+                                    email.getAttachments());
+                            int idSolicitudPago = Integer.parseInt(
+                                    event.getParams().get(0).trim());
+                            enviarTabla(
+                                    email,
+                                    respuesta,
+                                    "Pago registrado para la Solicitud ID "
+                                            + idSolicitudPago,
+                                    HtmlBuilder.HEADERS_PAGO,
+                                    pagoService.listarMisPagos(email.getFrom()));
+                            break;
+                        case Token.LISTAR:
+                            enviarTabla(
+                                    email,
+                                    respuesta,
+                                    "Mis pagos",
+                                    HtmlBuilder.HEADERS_PAGO,
+                                    pagoService.listarMisPagos(email.getFrom()));
+                            break;
+                        case Token.HELP:
+                            mostrarYEnviarHELP(
+                                    email, respuesta, pagoService.getComandosPago());
+                            break;
+                        default:
+                            comandoDesconocido(
+                                    email, respuesta, "pago", "agregar, listar, help");
+                    }
+                } catch (Exception ex) {
+                    manejarExcepcion(
+                            email, respuesta, ex,
+                            event.getAction() == Token.AGREGAR
+                                    ? "CU3 - Error al registrar el pago" : null);
                 }
             }
 
@@ -319,13 +523,54 @@ public class Home {
                     switch (event.getAction()) {
                         case Token.LISTAR:
                             List<String[]> list = evaluacionService.listarEvaluaciones();
+                            imprimirTablaConsola(
+                                    "CU3 - Evaluaciones de Dirección de Carrera",
+                                    HtmlBuilder.HEADERS_EVALUACION, list);
                             enviarTabla(email, respuesta, "Evaluaciones de Dirección de Carrera", HtmlBuilder.HEADERS_EVALUACION, list);
                             break;
                         case Token.REGISTRAR:
                         case Token.EVALUAR:
-                            evaluacionService.evaluarSolicitud(event.getParams(), email.getFrom());
-                            List<String[]> listEv = evaluacionService.listarEvaluaciones();
-                            enviarTabla(email, respuesta, "Evaluacion registrada exitosamente", HtmlBuilder.HEADERS_EVALUACION, listEv);
+                            EvaluacionService.ResultadoEvaluacion evaluacion =
+                                    evaluacionService.evaluarSolicitud(
+                                    event.getParams(), contextoComando.idUsuario());
+                            String htmlNotificacion = HtmlBuilder.generarResultadoEvaluacion(
+                                    evaluacion.idSolicitud(),
+                                    evaluacion.codigoSolicitud(),
+                                    evaluacion.decision(),
+                                    evaluacion.nuevoEstado(),
+                                    evaluacion.motivo());
+                            boolean notificacionEnviada = new SendEmail().sendmailDirect(
+                                    evaluacion.correoEstudiante(),
+                                    "Resultado de evaluación - Solicitud "
+                                            + evaluacion.codigoSolicitud(),
+                                    htmlNotificacion);
+                            String errorEnvio = notificacionEnviada
+                                    ? null : "El servidor SMTP no aceptó la notificación.";
+                            boolean estadoNotificacionGuardado = true;
+                            try {
+                                evaluacionService.registrarResultadoNotificacion(
+                                        evaluacion.idSolicitud(),
+                                        notificacionEnviada,
+                                        errorEnvio);
+                            } catch (SQLException ex) {
+                                estadoNotificacionGuardado = false;
+                                System.err.println(
+                                        "[CU3] La evaluación fue registrada, pero no se pudo "
+                                        + "actualizar el estado de envío de la notificación: "
+                                        + ex.getMessage());
+                            }
+                            String mensaje = "La solicitud " + evaluacion.codigoSolicitud()
+                                    + " fue " + evaluacion.decision().toLowerCase(
+                                            java.util.Locale.ROOT)
+                                    + ". Estado registrado: " + evaluacion.nuevoEstado()
+                                    + (notificacionEnviada
+                                            ? ". Notificación enviada al estudiante."
+                                            : ". No se pudo enviar la notificación al estudiante.");
+                            if (!estadoNotificacionGuardado) {
+                                mensaje += " No se pudo guardar el resultado del envío en la base de datos.";
+                            }
+                            System.out.println("[CU3 - EVALUACION REGISTRADA] " + mensaje);
+                            enviarExito(email, respuesta, "Evaluación registrada exitosamente", mensaje);
                             break;
                         case Token.HELP:
                             mostrarYEnviarHELP(email, respuesta, evaluacionService.getComandosEvaluacion());
@@ -334,7 +579,9 @@ public class Home {
                             comandoDesconocido(email, respuesta, "evaluacion", "listar, registrar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    manejarExcepcion(
+                            email, respuesta, ex,
+                            "CU3 - Error al registrar/consultar evaluación");
                 }
             }
 
@@ -461,18 +708,47 @@ public class Home {
                     switch (event.getAction()) {
                         case Token.LISTAR:
                             List<String[]> list = bloqueoGrupoService.listarBloqueos();
+                            imprimirTablaConsola(
+                                    "CU4 - Control y Bloqueos de Cupos",
+                                    HtmlBuilder.HEADERS_BLOQUEO_GRUPO, list);
                             enviarTabla(email, respuesta, "Control y Bloqueos de Cupos", HtmlBuilder.HEADERS_BLOQUEO_GRUPO, list);
                             break;
                         case Token.BLOQUEAR:
                         case Token.AGREGAR:
-                            bloqueoGrupoService.bloquearCupo(event.getParams());
-                            List<String[]> listB = bloqueoGrupoService.listarBloqueos();
-                            enviarTabla(email, respuesta, "Cupo bloqueado/reservado exitosamente", HtmlBuilder.HEADERS_BLOQUEO_GRUPO, listB);
+                            if (!contextoComando.esAdministrativo()) {
+                                throw new SecurityException(
+                                        "Solo el Director o el Personal Académico puede bloquear cupos.");
+                            }
+                            Models.BloqueoGrupo bloqueo =
+                                    bloqueoGrupoService.bloquearCupo(
+                                            event.getParams(), contextoComando.idUsuario());
+                            String mensajeBloqueo = "Bloqueo #" + bloqueo.getId()
+                                    + " registrado. Se reservaron "
+                                    + bloqueo.getCantidad() + " cupo(s) del grupo "
+                                    + bloqueo.getIdGrupo() + " para la solicitud "
+                                    + bloqueo.getIdSolicitud() + ".";
+                            System.out.println("[CU4 - BLOQUEO EXITOSO] " + mensajeBloqueo);
+                            enviarExito(
+                                    email, respuesta, "Cupo bloqueado exitosamente",
+                                    mensajeBloqueo);
                             break;
                         case Token.LIBERAR:
-                            bloqueoGrupoService.liberarCupo(event.getParams());
-                            List<String[]> listLib = bloqueoGrupoService.listarBloqueos();
-                            enviarTabla(email, respuesta, "Cupo liberado exitosamente", HtmlBuilder.HEADERS_BLOQUEO_GRUPO, listLib);
+                            if (!contextoComando.esAdministrativo()) {
+                                throw new SecurityException(
+                                        "Solo el Director o el Personal Académico puede liberar cupos.");
+                            }
+                            Models.BloqueoGrupo liberado =
+                                    bloqueoGrupoService.liberarCupo(
+                                            event.getParams(), contextoComando.idUsuario());
+                            String mensajeLiberacion = "Bloqueo #"
+                                    + liberado.getId() + " liberado. Se reintegraron "
+                                    + liberado.getCantidad() + " cupo(s) al grupo "
+                                    + liberado.getIdGrupo() + ".";
+                            System.out.println("[CU4 - LIBERACIÓN EXITOSA] "
+                                    + mensajeLiberacion);
+                            enviarExito(
+                                    email, respuesta, "Cupo liberado exitosamente",
+                                    mensajeLiberacion);
                             break;
                         case Token.HELP:
                             mostrarYEnviarHELP(email, respuesta, bloqueoGrupoService.getComandosBloqueo());
@@ -481,7 +757,13 @@ public class Home {
                             comandoDesconocido(email, respuesta, "bloqueo_grupo", "listar, bloquear, liberar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    String contexto = event.getAction() == Token.BLOQUEAR
+                            || event.getAction() == Token.AGREGAR
+                            ? "CU4 - Error al bloquear cupo"
+                            : event.getAction() == Token.LIBERAR
+                                    ? "CU4 - Error al liberar cupo"
+                                    : "CU4 - Error al consultar bloqueos";
+                    manejarExcepcion(email, respuesta, ex, contexto);
                 }
             }
 
@@ -494,23 +776,104 @@ public class Home {
                 try {
                     switch (event.getAction()) {
                         case Token.LISTAR:
-                            List<String[]> list = oficioCpdService.listarOficios();
+                            List<String[]> list = contextoComando.tieneRol("CPD")
+                                    ? respuestaCpdService.listarOficiosRemitidos()
+                                    : oficioCpdService.listarOficios();
+                            imprimirTablaConsola(
+                                    "CU5 - Oficios remitidos y pendientes a CPD",
+                                    HtmlBuilder.HEADERS_OFICIO_CPD, list);
                             enviarTabla(email, respuesta, "Oficios Remitidos a CPD", HtmlBuilder.HEADERS_OFICIO_CPD, list);
                             break;
+                        case Token.CONSULTAR:
+                            if (event.getParams().size() != 1) {
+                                throw new IllegalArgumentException(
+                                        "Formato: oficio_cpd consultar id_oficio");
+                            }
+                            int idOficioConsulta;
+                            try {
+                                idOficioConsulta = Integer.parseInt(
+                                        event.getParams().get(0).trim());
+                            } catch (NumberFormatException ex) {
+                                throw new IllegalArgumentException(
+                                        "El ID del oficio debe ser un número entero.", ex);
+                            }
+                            List<String[]> solicitudesOficio =
+                                    respuestaCpdService.listarSolicitudesDeOficio(
+                                            idOficioConsulta);
+                            imprimirTablaConsola(
+                                    "CU6 - Solicitudes incluidas en el oficio "
+                                            + idOficioConsulta,
+                                    HtmlBuilder.HEADERS_SOLICITUDES_OFICIO_CPD,
+                                    solicitudesOficio);
+                            String htmlOficio = HtmlBuilder.generarTabla(
+                                    "Solicitudes del oficio " + idOficioConsulta,
+                                    HtmlBuilder.HEADERS_SOLICITUDES_OFICIO_CPD,
+                                    solicitudesOficio);
+                            mostraRespuesta(htmlOficio);
+                            if (email.getFrom() != null
+                                    && !email.getFrom().trim().isEmpty()) {
+                                respuesta.sendmailWithAttachments(
+                                        email.getFrom(),
+                                        "Oficio CPD " + idOficioConsulta
+                                                + " y documentos adjuntos",
+                                        htmlOficio,
+                                        respuestaCpdService
+                                                .obtenerArchivosDescargablesOficio(
+                                                        idOficioConsulta));
+                            }
+                            break;
+                        case Token.REMITIR:
+                            OficioCpdService.ResultadoRemision remision =
+                                    oficioCpdService.remitirACpd(
+                                            event.getParams(), contextoComando.idUsuario());
+                            System.out.println(
+                                    (remision.enviado()
+                                            ? "[CU5 - REMISIÓN EXITOSA] "
+                                            : "[CU5 - ERROR DE ENVÍO] ")
+                                    + remision.mensaje());
+                            if (remision.enviado()) {
+                                enviarExito(
+                                        email, respuesta, "Oficio remitido a CPD",
+                                        remision.mensaje());
+                            } else {
+                                enviarErrorDetallado(
+                                        email, respuesta, "Oficio pendiente de envío",
+                                        remision.mensaje(),
+                                        "Reintente con oficio_cpd generar id_oficio_pendiente.");
+                            }
+                            break;
                         case Token.GENERAR:
-                        case Token.AGREGAR:
-                            oficioCpdService.remitirACpd(event.getParams(), email.getFrom());
-                            List<String[]> listGen = oficioCpdService.listarOficios();
-                            enviarTabla(email, respuesta, "Caso remitido a CPD exitosamente", HtmlBuilder.HEADERS_OFICIO_CPD, listGen);
+                            OficioCpdService.ResultadoRemision reintento =
+                                    oficioCpdService.reenviarOficioPendiente(
+                                            event.getParams());
+                            System.out.println(
+                                    (reintento.enviado()
+                                            ? "[CU5 - REMISIÓN EXITOSA] "
+                                            : "[CU5 - ERROR DE ENVÍO] ")
+                                    + reintento.mensaje());
+                            if (reintento.enviado()) {
+                                enviarExito(
+                                        email, respuesta, "Oficio remitido a CPD",
+                                        reintento.mensaje());
+                            } else {
+                                enviarErrorDetallado(
+                                        email, respuesta, "Oficio pendiente de envío",
+                                        reintento.mensaje(),
+                                        "Verifique la configuración SMTP y reintente.");
+                            }
                             break;
                         case Token.HELP:
                             mostrarYEnviarHELP(email, respuesta, oficioCpdService.getComandosOficio());
                             break;
                         default:
-                            comandoDesconocido(email, respuesta, "oficio_cpd", "listar, generar, help");
+                            comandoDesconocido(
+                                    email, respuesta, "oficio_cpd",
+                                    "remitir, listar, consultar, generar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    manejarExcepcion(
+                            email, respuesta, ex,
+                            "CU5 - Error al procesar/remitir oficio a CPD");
                 }
             }
 
@@ -521,25 +884,103 @@ public class Home {
             @Override
             public void respuestaCpd(TokenEvent event) {
                 try {
+                    if (!contextoComando.tieneRol("CPD")) {
+                        throw new SecurityException(
+                                "Solo una cuenta con rol CPD puede registrar respuestas "
+                                + "de habilitación, observación o rechazo.");
+                    }
                     switch (event.getAction()) {
+                        case Token.OFICIOS:
+                            List<String[]> oficiosRecibidos =
+                                    respuestaCpdService.listarOficiosRemitidos();
+                            imprimirTablaConsola(
+                                    "CU6 - Oficios recibidos por CPD",
+                                    HtmlBuilder.HEADERS_OFICIO_CPD,
+                                    oficiosRecibidos);
+                            enviarTabla(
+                                    email,
+                                    respuesta,
+                                    "Oficios recibidos por CPD",
+                                    HtmlBuilder.HEADERS_OFICIO_CPD,
+                                    oficiosRecibidos);
+                            break;
                         case Token.LISTAR:
                             List<String[]> list = respuestaCpdService.listarRespuestas();
-                            enviarTabla(email, respuesta, "Respuestas y Habilitaciones de CPD", HtmlBuilder.HEADERS_RESPUESTA_CPD, list);
+                            imprimirTablaConsola(
+                                    "CU6 - Respuestas registradas por CPD",
+                                    HtmlBuilder.HEADERS_RESPUESTA_CPD, list);
+                            enviarTabla(email, respuesta, "Respuestas de CPD", HtmlBuilder.HEADERS_RESPUESTA_CPD, list);
+                            break;
+                        case Token.PENDIENTES:
+                            List<String[]> pendientesCpd =
+                                    respuestaCpdService.listarPendientes();
+                            System.out.println(
+                                    "[CU6 - PENDIENTES CPD] "
+                                    + pendientesCpd.size()
+                                    + " solicitud(es) remitidas esperan respuesta.");
+                            imprimirTablaConsola(
+                                    "Oficios pendientes de procesamiento por CPD",
+                                    HtmlBuilder.HEADERS_PENDIENTES_CPD,
+                                    pendientesCpd);
+                            enviarTabla(
+                                    email,
+                                    respuesta,
+                                    "Oficios pendientes de procesamiento por CPD",
+                                    HtmlBuilder.HEADERS_PENDIENTES_CPD,
+                                    pendientesCpd);
                             break;
                         case Token.REGISTRAR:
                         case Token.AGREGAR:
-                            respuestaCpdService.registrarRespuestaCpd(event.getParams(), email.getFrom());
-                            List<String[]> listReg = respuestaCpdService.listarRespuestas();
-                            enviarTabla(email, respuesta, "Respuesta de CPD registrada exitosamente", HtmlBuilder.HEADERS_RESPUESTA_CPD, listReg);
+                            RespuestaCpdService.ResultadoRespuesta respuestaCpd =
+                                    respuestaCpdService.responder(
+                                            event.getParams(),
+                                            contextoComando.idUsuario());
+                            String mensajeRespuesta =
+                                    "Solicitud " + respuestaCpd.codigoSolicitud()
+                                    + ": CPD registró " + respuestaCpd.resultado()
+                                    + " (estado " + respuestaCpd.estado() + "). Código: "
+                                    + respuestaCpd.codigoRespuesta() + ". Observación: "
+                                    + respuestaCpd.observacion() + ". Se enviaron "
+                                    + respuestaCpd.correosEnviados() + " correo(s); "
+                                    + respuestaCpd.correosPendientes()
+                                    + " quedó/quedaron pendiente(s).";
+                            if (respuestaCpd.academicosNotificados() == 0) {
+                                mensajeRespuesta +=
+                                        " No se encontraron cuentas activas de Dirección/"
+                                        + "Personal Académico para notificar.";
+                            } else {
+                                mensajeRespuesta += " Notificaciones para Dirección/"
+                                        + "Personal Académico: "
+                                        + respuestaCpd.academicosNotificados() + ".";
+                            }
+                            if (!respuestaCpd.estadosEnvioActualizados()) {
+                                mensajeRespuesta += " No se pudo guardar el estado de uno o más correos.";
+                            }
+                            System.out.println(
+                                    "[CU6 - RESPUESTA CPD REGISTRADA] "
+                                    + mensajeRespuesta);
+                            enviarExito(
+                                    email,
+                                    respuesta,
+                                    "Respuesta de CPD registrada",
+                                    mensajeRespuesta);
                             break;
                         case Token.HELP:
                             mostrarYEnviarHELP(email, respuesta, respuestaCpdService.getComandosRespuesta());
                             break;
                         default:
-                            comandoDesconocido(email, respuesta, "respuesta_cpd", "listar, registrar, help");
+                            comandoDesconocido(
+                                    email,
+                                    respuesta,
+                                    "cpd",
+                                    "pendientes, responder, respuesta_cpd listar, help");
                     }
                 } catch (Exception ex) {
-                    manejarExcepcion(email, respuesta, ex);
+                    manejarExcepcion(
+                            email,
+                            respuesta,
+                            ex,
+                            "CU6 - Error al consultar pendientes o registrar respuesta de CPD");
                 }
             }
 
@@ -631,7 +1072,10 @@ public class Home {
             public void error(TokenEvent event) {
                 String tokenInvalido = (event.getParams() != null && !event.getParams().isEmpty()) ? event.getParams().get(0) : "";
                 Utils.ErrorExplainer.ErrorDetail ed = Utils.ErrorExplainer.diagnosticarSintaxis(email.getSubject(), tokenInvalido);
-                enviarErrorExplainer(email, respuesta, ed);
+                String asunto = normalizarAliasCu2(
+                        normalizarAsuntoComando(email.getSubject()));
+                enviarErrorExplainer(
+                        email, respuesta, ed, contextoErrorComando(asunto));
             }
 
             @Override
@@ -641,12 +1085,267 @@ public class Home {
         });
 
         // Ejecutar interpretacion sintactica
-        interpreter.run();
+        try {
+            interpreter.run();
+        } catch (RuntimeException ex) {
+            System.err.println("Error inesperado al procesar comando de "
+                    + email.getFrom() + ":");
+            ex.printStackTrace(System.err);
+            enviarRespuestaControlAcceso(
+                    email,
+                    respuesta,
+                    "ERROR INESPERADO:\nNo se pudo procesar el comando. " +
+                    "El error fue registrado para su revisión.");
+        }
     }
 
     // ============================================================
     // METODOS DE ENVIO Y COMUNICACION
     // ============================================================
+
+    private static void enviarRespuestaControlAcceso(
+            Email email,
+            SendEmail respuesta,
+            String mensaje
+    ) {
+        String contenido = mensaje == null ? "" : mensaje;
+        boolean esError = contenido.startsWith("ERROR")
+                || contenido.startsWith("ACCESO DENEGADO");
+        String html;
+        if (contenido.startsWith("<!DOCTYPE html>")) {
+            html = contenido;
+        } else if (esError) {
+            String detalle = contenido.replaceFirst(
+                    "^(ERROR[^:]*:|ACCESO DENEGADO:)\\s*", "");
+            html = HtmlBuilder.generarMensajeErrorDetallado(
+                    "Acceso o comando no autorizado",
+                    comandoVisible(email),
+                    escaparHtml(detalle).replace("\n", "<br>"),
+                    "Envie 'help', registrese con 'estudiante register' " +
+                    "o inicie sesion con 'acceder sistema correo,password'.");
+        } else {
+            html = HtmlBuilder.generarMensajeExito(
+                    "Respuesta del sistema",
+                    escaparHtml(contenido).replace("\n", "<br>"));
+        }
+        mostraRespuesta(html);
+        if (email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
+            respuesta.sendmail(
+                    email.getFrom(),
+                    esError ? "Error del sistema" : "Respuesta del sistema",
+                    html);
+        }
+    }
+
+    private static String comandoVisible(Email email) {
+        String asunto = email == null || email.getSubject() == null
+                ? ""
+                : normalizarAsuntoComando(email.getSubject());
+        String[] partesComando = asunto.split("\\s+", 3);
+        if (partesComando.length < 3) {
+            return asunto;
+        }
+
+        String comando = (partesComando[0] + " " + partesComando[1])
+                .toLowerCase(java.util.Locale.ROOT);
+        String[] parametros = partesComando[2].split(",", -1);
+        int indicePassword = switch (comando) {
+            case "acceder sistema" -> 1;
+            case "estudiante agregar", "estudiante registrar",
+                 "estudiante register", "academico agregar",
+                 "director agregar", "cpd agregar" -> 7;
+            case "estudiante editar", "academico editar",
+                 "director editar", "cpd editar" -> 8;
+            default -> -1;
+        };
+        if (indicePassword < 0 || parametros.length <= indicePassword) {
+            return asunto;
+        }
+
+        parametros[indicePassword] = "********";
+        return partesComando[0] + " " + partesComando[1] + " "
+                + String.join(",", parametros);
+    }
+
+    private static String normalizarAsuntoComando(String asunto) {
+        if (asunto == null) {
+            return "";
+        }
+        return asunto.trim().replaceFirst("^\\$\\s*", "").trim();
+    }
+
+    private static String normalizarAliasCu2(String asunto) {
+        String lower = asunto.toLowerCase(java.util.Locale.ROOT);
+        if (lower.equals("enviar solicitud") || lower.startsWith("enviar solicitud ")) {
+            return "solicitud registrar" + asunto.substring("enviar solicitud".length());
+        }
+        if (lower.equals("solicitar materia_grupo")
+                || lower.startsWith("solicitar materia_grupo ")) {
+            return "solicitud_grupo agregar"
+                    + asunto.substring("solicitar materia_grupo".length());
+        }
+        if (lower.equals("archivo_solicitud adjuntar")
+                || lower.startsWith("archivo_solicitud adjuntar ")) {
+            return "archivo_solicitud agregar"
+                    + asunto.substring("archivo_solicitud adjuntar".length());
+        }
+        if (lower.equals("pago adjuntar")
+                || lower.startsWith("pago adjuntar ")) {
+            return "pago agregar"
+                    + asunto.substring("pago adjuntar".length());
+        }
+        if (lower.equals("mis_pagos listar")
+                || lower.startsWith("mis_pagos listar ")) {
+            return "pago listar"
+                    + asunto.substring("mis_pagos listar".length());
+        }
+        return asunto;
+    }
+
+    private static void registrarErrorComando(String asunto, String detalle) {
+        String contexto = contextoErrorComando(asunto);
+        if (contexto != null) {
+            System.out.println(contexto + ": " + textoConsola(detalle));
+        }
+    }
+
+    private static void mostrarResultadoAccesoEnTerminal(
+            String comando,
+            String resultado
+    ) {
+        if (comando == null) {
+            return;
+        }
+
+        String comandoNormalizado =
+                comando.toLowerCase(java.util.Locale.ROOT);
+        String mensaje = resultado == null ? "" : resultado.trim();
+        if (comandoNormalizado.startsWith("estudiante registrar ")
+                || comandoNormalizado.startsWith("estudiante register ")) {
+            if (mensaje.startsWith("REGISTRO COMPLETADO")) {
+                System.out.println("[ESTUDIANTE REGISTRADO EXITOSAMENTE]\n"
+                        + mensaje.replaceFirst("^REGISTRO COMPLETADO\\s*", "").trim());
+            } else {
+                System.out.println("[ERROR AL REGISTRAR ESTUDIANTE] "
+                        + mensaje.replaceFirst("^ERROR[^:]*:\\s*", "")
+                                .replace("\n", " "));
+            }
+            return;
+        }
+
+        if (!comandoNormalizado.startsWith("acceder sistema ")) {
+            return;
+        }
+
+        if (mensaje.startsWith("ACCESO DENEGADO")) {
+            System.out.println("[ACCESO DENEGADO] " +
+                    mensaje.replaceFirst("^ACCESO DENEGADO:?\\s*", "")
+                            .replace("\n", " "));
+        } else if (mensaje.startsWith("ERROR")) {
+            System.out.println("[ERROR DE ACCESO] " +
+                    mensaje.replaceFirst("^ERROR[^:]*:\\s*", "")
+                            .replace("\n", " "));
+        } else {
+            System.out.println("[ACCESO EXITOSO]\n" + mensaje);
+        }
+    }
+
+    private static String contextoErrorComando(String asunto) {
+        String lower = asunto == null
+                ? "" : asunto.toLowerCase(java.util.Locale.ROOT);
+        if (lower.startsWith("solicitud registrar ")) {
+            return "CU2 - Error al enviar la solicitud";
+        }
+        if (lower.startsWith("solicitud_grupo agregar ")) {
+            return "CU2 - Error al agregar materia/grupo";
+        }
+        if (lower.startsWith("archivo_solicitud agregar ")) {
+            return "CU2 - Error al adjuntar documento(s)";
+        }
+        if (lower.startsWith("pago agregar ")) {
+            return "CU3 - Error al registrar el pago";
+        }
+        if (esComando(lower, "bloqueo_grupo bloquear")
+                || esComando(lower, "bloqueo_grupo agregar")) {
+            return "CU4 - Error al bloquear cupo";
+        }
+        if (esComando(lower, "bloqueo_grupo liberar")) {
+            return "CU4 - Error al liberar cupo";
+        }
+        if (esComando(lower, "bloqueo_grupo listar")) {
+            return "CU4 - Error al consultar bloqueos";
+        }
+        return null;
+    }
+
+    private static boolean esComando(String asunto, String comando) {
+        return asunto.equals(comando) || asunto.startsWith(comando + " ");
+    }
+
+    private static boolean esComandoCu1(String asunto) {
+        return asunto.startsWith("usuario ")
+                || asunto.startsWith("estudiante ")
+                || asunto.startsWith("estudiantes ")
+                || asunto.startsWith("academico ")
+                || asunto.startsWith("academicos ")
+                || asunto.startsWith("director ")
+                || asunto.startsWith("directores ")
+                || asunto.matches("^cpd\\s+(listar|agregar|crear|editar|modificar)(\\s|$).*");
+    }
+
+    private static String escaparHtml(String texto) {
+        return texto.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private static void imprimirTablaConsola(
+            String titulo,
+            String[] headers,
+            List<String[]> filas
+    ) {
+        System.out.println("=== " + titulo + " ===");
+        System.out.println(String.join(" | ", headers));
+        if (filas == null || filas.isEmpty()) {
+            System.out.println("Sin registros.");
+            return;
+        }
+        for (String[] fila : filas) {
+            String[] valores = new String[headers.length];
+            for (int i = 0; i < headers.length; i++) {
+                valores[i] = fila != null && i < fila.length && fila[i] != null
+                        ? fila[i].replaceAll("\\s+", " ").trim() : "";
+            }
+            System.out.println(String.join(" | ", valores));
+        }
+    }
+
+    private static void imprimirDetalleConsola(
+            String[] solicitud,
+            List<String[]> grupos,
+            List<String[]> documentos,
+            List<String[]> evaluaciones
+    ) {
+        String[] etiquetas = {
+            "ID", "Código", "Estudiante", "Registro", "Período",
+            "Tipo de caso", "Estado", "Fecha", "Motivo",
+            "Observaciones", "Motivo de rechazo"
+        };
+        for (int i = 0; i < etiquetas.length; i++) {
+            String valor = i < solicitud.length && solicitud[i] != null
+                    ? solicitud[i].replaceAll("\\s+", " ").trim() : "";
+            System.out.println(etiquetas[i] + ": " + valor);
+        }
+        imprimirTablaConsola(
+                "Materias y grupos", HtmlBuilder.HEADERS_SOLICITUD_GRUPO, grupos);
+        imprimirTablaConsola(
+                "Documentos adjuntos", HtmlBuilder.HEADERS_ARCHIVO_SOLICITUD,
+                documentos);
+        imprimirTablaConsola(
+                "Evaluaciones", HtmlBuilder.HEADERS_EVALUACION, evaluaciones);
+    }
 
     private static void enviarTabla(Email email, SendEmail respuesta, String titulo, String[] headers, List<String[]> filas) {
         String html = HtmlBuilder.generarTabla(titulo, headers, filas);
@@ -654,7 +1353,6 @@ public class Home {
         if (email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
             respuesta.sendmail(email.getFrom(), titulo, html);
         }
-        System.out.println("[RESPUESTA TABLA] '" + titulo + "' (" + (filas != null ? filas.size() : 0) + " registros) -> " + email.getFrom());
     }
 
     private static void enviarExito(Email email, SendEmail respuesta, String titulo, String mensaje) {
@@ -663,16 +1361,33 @@ public class Home {
         if (email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
             respuesta.sendmail(email.getFrom(), titulo, html);
         }
-        System.out.println("[RESPUESTA EXITO] '" + titulo + "' -> " + email.getFrom() + " | " + mensaje);
     }
 
     private static void enviarErrorExplainer(Email email, SendEmail respuesta, Utils.ErrorExplainer.ErrorDetail ed) {
+        enviarErrorExplainer(email, respuesta, ed, null);
+    }
+
+    private static void enviarErrorExplainer(
+            Email email,
+            SendEmail respuesta,
+            Utils.ErrorExplainer.ErrorDetail ed,
+            String contextoConsola
+    ) {
+        ed.setComandoRecibido(comandoVisible(email));
         String html = HtmlBuilder.generarMensajeErrorCompleto(ed);
+        String detalle = textoConsola(ed.getQueFallo());
+        if (contextoConsola != null && !contextoConsola.trim().isEmpty()) {
+            System.out.println(contextoConsola + ": " + detalle);
+        } else if (ed.getTitulo().toLowerCase().contains("base de datos")
+                || ed.getTitulo().toLowerCase().contains("servidor de base")) {
+            System.out.println("Error de base de datos: " + detalle);
+        } else {
+            System.out.println("Error en el comando: " + detalle);
+        }
         mostraRespuesta(html);
         if (email != null && email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
             respuesta.sendmail(email.getFrom(), "Error: " + ed.getTitulo(), html);
         }
-        System.err.println("[RESPUESTA ERROR] '" + ed.getTitulo() + "' -> " + (email != null ? email.getFrom() : "") + " | " + ed.getQueFallo());
     }
 
     private static void enviarErrorDetallado(Email email, SendEmail respuesta, String titulo, String queFallo, String sugerencia) {
@@ -694,7 +1409,6 @@ public class Home {
         if (email.getFrom() != null && !email.getFrom().trim().isEmpty()) {
             respuesta.sendmail(email.getFrom(), "Ayuda - Comandos del Sistema", html);
         }
-        System.out.println("[RESPUESTA AYUDA] Guía de comandos enviada a " + email.getFrom());
     }
 
     private static void comandoDesconocido(Email email, SendEmail respuesta, String contextoEntidad, String accionesValidas) {
@@ -704,11 +1418,29 @@ public class Home {
     }
 
     private static void manejarExcepcion(Email email, SendEmail respuesta, Exception ex) {
+        manejarExcepcion(email, respuesta, ex, null);
+    }
+
+    private static void manejarExcepcion(
+            Email email,
+            SendEmail respuesta,
+            Exception ex,
+            String contextoConsola
+    ) {
         String subject = email != null ? email.getSubject() : "";
         String from = email != null ? email.getFrom() : "";
         Utils.ErrorExplainer.ErrorDetail ed = Utils.ErrorExplainer.diagnosticarExcepcion(subject, ex, from);
-        enviarErrorExplainer(email, respuesta, ed);
-        ex.printStackTrace();
+        enviarErrorExplainer(email, respuesta, ed, contextoConsola);
+    }
+
+    private static String textoConsola(String texto) {
+        if (texto == null || texto.trim().isEmpty()) {
+            return "revise el comando enviado";
+        }
+        String limpio = texto.replaceAll("<[^>]*>", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return limpio.length() > 180 ? limpio.substring(0, 177) + "..." : limpio;
     }
 
     private static void comandoDesconocido(String destinatario, SendEmail respuesta) {
@@ -735,61 +1467,4 @@ public class Home {
         });
     }
 
-    private static String getMenuGeneralAyuda() {
-        return "====================================================\n" +
-               "SISTEMA DE GESTION DE CASOS ESPECIALES ACADEMICOS\n" +
-               "====================================================\n" +
-               "Envie en el SUBJECT del correo uno de los siguientes comandos:\n\n" +
-               "CU1. GESTION DE USUARIOS Y ROLES:\n" +
-               "  - usuario listar\n" +
-               "  - usuario agregar nombre,apellidos,ci,email,telefono,direccion,fecha_nac(yyyy-MM-dd),password\n" +
-               "  - usuario modificar id,nombre,apellidos,ci,email,telefono,direccion,fecha_nac,password,estado\n" +
-               "  - usuario eliminar id\n" +
-               "  - rol listar\n" +
-               "  - rol agregar nombre,descripcion\n" +
-               "  - rol asignar id_usuario,id_rol\n" +
-               "  - estudiante listar\n" +
-               "  - estudiante agregar id_usuario,registro_universitario,id_carrera,semestre_actual\n" +
-               "  - personal_carrera listar\n" +
-               "  - personal_carrera agregar id_usuario,cargo,id_carrera\n" +
-               "  - director_carrera listar\n" +
-               "  - director_carrera agregar id_usuario,id_carrera,gestion_inicio,gestion_fin\n\n" +
-               "CU2. SOLICITUD DE CASO ESPECIAL:\n" +
-               "  - solicitud listar\n" +
-               "  - solicitud mis_casos [registro,password]\n" +
-               "  - solicitud pendientes [registro,password]\n" +
-               "  - solicitud registrar id_estudiante,id_periodo,tipo_caso,motivo\n" +
-               "  - solicitud consultar id_solicitud\n" +
-               "  - solicitud_grupo agregar id_solicitud,id_grupo,motivo\n" +
-               "  - solicitud_grupo listar id_solicitud\n" +
-               "  - archivo_solicitud agregar id_solicitud,nombre_archivo,tipo,ruta_o_descripcion\n" +
-               "  - archivo_solicitud listar id_solicitud\n\n" +
-               "CU3. EVALUACION POR DIRECCION DE CARRERA:\n" +
-               "  - evaluacion listar\n" +
-               "  - evaluacion registrar id_solicitud,id_evaluador,decision(APROBADA|RECHAZADA|OBSERVADA),justificacion,observaciones\n\n" +
-               "CU4. BLOQUEO Y CONTROL DE CUPOS:\n" +
-               "  - carrera listar | carrera agregar codigo,nombre,facultad\n" +
-               "  - periodo listar | periodo agregar gestion,fecha_inicio,fecha_fin\n" +
-               "  - materia listar | materia agregar sigla,nombre,nivel_semestre,creditos\n" +
-               "  - grupo listar | grupo consultar id_grupo\n" +
-               "  - grupo agregar id_materia,id_periodo,sigla_grupo,docente,cupo_max,cupo_exc\n" +
-               "  - bloqueo_grupo listar\n" +
-               "  - bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador\n" +
-               "  - bloqueo_grupo liberar id_bloqueo,observacion\n\n" +
-               "CU5. REMISION A CPD:\n" +
-               "  - oficio_cpd listar\n" +
-               "  - oficio_cpd generar id_solicitud,destinatario,referencia,detalle,id_responsable\n\n" +
-               "CU6. CONFIRMACION Y HABILITACION DE CPD:\n" +
-               "  - respuesta_cpd listar\n" +
-               "  - respuesta_cpd registrar id_oficio,id_solicitud,resultado(HABILITADA|CONFIRMADA_CPD|OBSERVADA_CPD|RECHAZADA_CPD),referencia_respaldo,observaciones,id_responsable\n\n" +
-               "CU7. HISTORIAL Y TRAZABILIDAD:\n" +
-               "  - historial listar\n" +
-               "  - historial consultar id_solicitud\n" +
-               "  - notificacion listar\n\n" +
-               "CU8. REPORTES Y ESTADISTICAS:\n" +
-               "  - reporte general\n" +
-               "  - reporte estados\n" +
-               "  - reporte periodos\n" +
-               "  - reporte cupos\n";
-    }
 }

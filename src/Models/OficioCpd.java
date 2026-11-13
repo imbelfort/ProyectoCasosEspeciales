@@ -12,6 +12,7 @@ public class OficioCpd {
     private int idResponsableRemision; // FK Usuario(id_usuario)
     private Timestamp fechaRemision;
     private String estado; // EMITIDO, RECIBIDO_CPD, CONTESTADO
+    private String rutaDocumento;
 
     public OficioCpd() {
         this.estado = "EMITIDO";
@@ -101,5 +102,13 @@ public class OficioCpd {
 
     public void setEstado(String estado) {
         this.estado = estado;
+    }
+
+    public String getRutaDocumento() {
+        return rutaDocumento;
+    }
+
+    public void setRutaDocumento(String rutaDocumento) {
+        this.rutaDocumento = rutaDocumento;
     }
 }

@@ -8,6 +8,7 @@ package Comunication;
 //import com.juanvladimir13.template.MaryTemplate;
 import Database.ConfigEmailServer;
 import Utils.Email;
+import java.io.File;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedReader;
@@ -25,8 +26,6 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
@@ -40,13 +39,16 @@ import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
 import javax.mail.util.ByteArrayDataSource;
+import javax.activation.DataHandler;
+import javax.activation.FileDataSource;
+import javax.mail.internet.MimeUtility;
 import proyectomailgrupo01sa.Principal;
 
 public class SendEmail {
 
-    private final static int PORT_SMTP = 25;
-    private final static String SERVER = "mail.tecnoweb.org.bo";
-    private final static String user_emisor = "grupo01sa@tecnoweb.org.bo";
+    private final static int PORT_SMTP = parsePort(ConfigEmailServer.PORT_SMTP, 25);
+    private final static String SERVER = ConfigEmailServer.HOST;
+    private final static String user_emisor = ConfigEmailServer.MAIL;
     private static String user_receptor;
     private static Socket socket;
     private static BufferedReader entrada;
@@ -65,13 +67,11 @@ public class SendEmail {
         this.user_receptor = user_receptor;
     }
 
-    public void responseUser(Email email, String mensaje) {
+    public boolean responseUser(Email email, String mensaje) {
         // Estableciendo variables
         BufferedReader reader;
         DataOutputStream writer;
         String command;
-        System.out.println("Enviando correo de respuesta a: " + email.getFrom());
-
         try {
             // Estableciendo Conexion Socket
             Socket socket = new Socket(SERVER, PORT_SMTP);
@@ -80,16 +80,20 @@ public class SendEmail {
             writer = new DataOutputStream(socket.getOutputStream());
 
             if (socket != null && reader != null && writer != null) {
-                logSmtp("S", reader.readLine());
+                readSmtpResponse(reader);
 
-                // Saludar al servidor
                 command = "HELO " + SERVER + "\r\n";
                 sendSmtpCommand(writer, command);
-                logSmtp("S", reader.readLine());
+                readSmtpResponse(reader);
+
+                command = "EHLO " + SERVER + "\r\n";
+                sendSmtpCommand(writer, command);
+                readSmtpResponse(reader);
+                System.out.println("[SMTP] Envío sin autenticación.");
 
                 command = "MAIL FROM:<" + user_emisor + ">\r\n";
                 sendSmtpCommand(writer, command);
-                logSmtp("S", reader.readLine());
+                validarCodigo(readSmtpResponse(reader), "250", "remitente");
 
                 if (Principal.cbx_emailsReceptores != null && Principal.cbx_emailsReceptores.isSelected()) {
                     // Obtener destinatarios desde JTextArea
@@ -103,9 +107,7 @@ public class SendEmail {
                     }
 
                     for (String r : receptores) {
-                        boolean valido = esEmailValido(r);
-                        System.out.println("DEBUG: candidato receptor='" + r + "' valido=" + valido);
-                        if (valido) {
+                        if (esEmailValido(r)) {
                             destinatarios.add(r.trim());
                         }
                     }
@@ -114,7 +116,10 @@ public class SendEmail {
                     for (String destinatario : destinatarios) {
                         command = "RCPT TO:<" + destinatario + ">\r\n";
                         sendSmtpCommand(writer, command);
-                        logSmtp("S", reader.readLine());
+                        String respuesta = readSmtpResponse(reader);
+                        if (!respuestaSmtpExitosa(respuesta)) {
+                            throw new IOException("el servidor SMTP rechazó al destinatario");
+                        }
                     }
                 } else {
                     // Solo al remitente original
@@ -122,14 +127,17 @@ public class SendEmail {
                     if (esEmailValido(origen)) {
                         command = "RCPT TO:<" + origen.trim() + ">\r\n";
                         sendSmtpCommand(writer, command);
-                        logSmtp("S", reader.readLine());
+                        String respuesta = readSmtpResponse(reader);
+                        if (!respuestaSmtpExitosa(respuesta)) {
+                            throw new IOException("el servidor SMTP rechazó al destinatario");
+                        }
                     } else {
                         // Si no hay destinatario vÃ¡lido, cancelar
                         System.out.println("Correo de respuesta no enviado: no hay destinatarios vÃ¡lidos");
                         writer.close();
                         reader.close();
                         socket.close();
-                        return;
+                        return false;
                     }
                 }
 
@@ -137,7 +145,9 @@ public class SendEmail {
                 // Comenzar DATA
                 command = "DATA\r\n";
                 sendSmtpCommand(writer, command);
-                logSmtp("S", reader.readLine());
+                if (!respuestaSmtpExitosa(readSmtpResponse(reader))) {
+                    throw new IOException("el servidor SMTP rechazó el contenido");
+                }
 
                 // Construir cabeceras mÃ­nimas vÃ¡lidas (From, To, Subject, MIME)
                 StringBuilder data = new StringBuilder();
@@ -213,19 +223,14 @@ public class SendEmail {
 
                 writer.write(finalData.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 writer.flush();
-                String dataResponse = reader.readLine();
-                if (dataResponse != null) {
-                    System.out.println("SMTP: " + dataResponse);
-                } else {
-                    System.out.println("Correo de respuesta no enviado: el servidor no respondiÃ³ despuÃ©s del cuerpo");
+                String dataResponse = readSmtpResponse(reader);
+                if (!respuestaSmtpExitosa(dataResponse)) {
+                    throw new IOException("el servidor SMTP no aceptó el mensaje");
                 }
 
                 command = "QUIT\r\n";
                 sendSmtpCommand(writer, command);
-                String quitResponse = reader.readLine();
-                if (quitResponse != null) {
-                    logSmtp("S", quitResponse);
-                }
+                readSmtpResponse(reader);
 
                 System.out.println("Correo de respuesta enviado exitosamente a: " + email.getFrom());
 
@@ -235,25 +240,68 @@ public class SendEmail {
             writer.close();
             reader.close();
             socket.close();
+            return true;
         } catch (UnknownHostException e) {
-            e.printStackTrace();
             System.out.println("Correo de respuesta no enviado: no se pudo conectar con el servidor indicado");
         } catch (IOException ex) {
-            System.out.println("Correo de respuesta no enviado: " + ex.getMessage());
+            System.out.println("Correo de respuesta no enviado: " + mensajeErrorBreve(ex));
         } catch (Exception ex) {
-            System.out.println("Correo de respuesta no enviado: " + ex.getMessage());
+            System.out.println("Correo de respuesta no enviado: " + mensajeErrorBreve(ex));
         }
+        return false;
     }
 
     private static void sendSmtpCommand(DataOutputStream writer, String command) throws IOException {
-        System.out.println("[SMTP][C] " + command.replace("\r", "").replace("\n", ""));
+        String visible = command.replace("\r", "").replace("\n", "");
+        if (visible.startsWith("AUTH") || visible.matches("^[A-Za-z0-9+/=]{8,}$")) {
+            visible = "[credencial SMTP]";
+        }
+        System.out.println("[SMTP][C] " + visible);
         writer.writeBytes(command);
         writer.flush();
     }
 
-    private static void logSmtp(String direction, String message) {
-        if (message != null) {
-            System.out.println("[SMTP][" + direction + "] " + message);
+    private static String readSmtpResponse(BufferedReader reader) throws IOException {
+        StringBuilder response = new StringBuilder();
+        String line = reader.readLine();
+        if (line == null) {
+            throw new IOException("el servidor SMTP cerró la conexión");
+        }
+        System.out.println("[SMTP][S] " + line);
+        response.append(line);
+        while (line.length() >= 4 && line.charAt(3) == '-') {
+            line = reader.readLine();
+            if (line == null) {
+                throw new IOException("el servidor SMTP cerró la conexión");
+            }
+            System.out.println("[SMTP][S] " + line);
+            response.append('\n').append(line);
+        }
+        return response.toString();
+    }
+
+    private static boolean respuestaSmtpExitosa(String response) {
+        return response != null
+                && response.length() >= 3
+                && (response.charAt(0) == '2' || response.charAt(0) == '3');
+    }
+
+    private static void validarCodigo(String respuesta, String codigo, String operacion) throws IOException {
+        if (respuesta == null || !respuesta.startsWith(codigo)) {
+            throw new IOException("el servidor SMTP rechazó " + operacion);
+        }
+    }
+
+    private static String mensajeErrorBreve(Exception ex) {
+        String mensaje = ex.getMessage();
+        return mensaje == null || mensaje.trim().isEmpty() ? "error de comunicación" : mensaje.trim();
+    }
+
+    private static int parsePort(String value, int fallback) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return fallback;
         }
     }
 
@@ -303,18 +351,112 @@ private boolean esEmailValido(String email) {
             t.close();
             System.out.println("mensaje enviado");
         } catch (MessagingException ex) {
-            Logger.getLogger(SendEmail.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("correo no enviado");
+            System.out.println("Correo no enviado: error de comunicación con el servidor SMTP");
         }
     }
 
-    public void sendmail(String receptor, String subject, String htmlContent) {
+    public boolean sendmail(String receptor, String subject, String htmlContent) {
         if (receptor == null || receptor.trim().isEmpty()) {
             System.out.println("[SendEmail] Destinatario vacio.");
-            return;
+            return false;
         }
+
         Email email = new Email(receptor.trim(), subject);
-        responseUser(email, htmlContent);
+        return responseUser(email, htmlContent);
+    }
+
+    public boolean sendmailDirect(String receptor, String subject, String htmlContent) {
+        if (!esEmailValido(receptor)) {
+            System.out.println("[SMTP] Notificación no enviada: el correo del estudiante no es válido.");
+            return false;
+        }
+        try {
+            Properties properties = new Properties();
+            properties.put("mail.smtp.host", SERVER);
+            properties.put("mail.smtp.port", String.valueOf(PORT_SMTP));
+            properties.put("mail.smtp.auth", "false");
+            properties.put("mail.smtp.starttls.enable", "false");
+            Session session = Session.getInstance(properties);
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(user_emisor));
+            message.setRecipient(Message.RecipientType.TO, new InternetAddress(receptor));
+            message.setSubject(subject.replaceAll("\\R+", " ").trim(), "UTF-8");
+            message.setContent(htmlContent, "text/html; charset=UTF-8");
+            try (javax.mail.Transport transport = session.getTransport("smtp")) {
+                transport.connect(SERVER, PORT_SMTP, null, null);
+                transport.sendMessage(message, message.getAllRecipients());
+            }
+            System.out.println("[SMTP] Notificación enviada a: " + receptor);
+            return true;
+        } catch (Exception ex) {
+            System.out.println("[SMTP] Notificación no enviada: " + mensajeErrorBreve(ex));
+            return false;
+        }
+    }
+
+    public boolean sendmailWithAttachment(
+            String receptor,
+            String subject,
+            String htmlContent,
+            File attachment
+    ) {
+        return sendmailWithAttachments(
+                receptor, subject, htmlContent, java.util.Collections.singletonList(attachment));
+    }
+
+    public boolean sendmailWithAttachments(
+            String receptor,
+            String subject,
+            String htmlContent,
+            List<File> attachments
+    ) {
+        if (!esEmailValido(receptor)) {
+            System.out.println("[SMTP] Oficio no enviado: el correo de CPD no es válido.");
+            return false;
+        }
+        if (attachments == null || attachments.isEmpty()
+                || attachments.stream().anyMatch(attachment ->
+                        attachment == null || !attachment.isFile() || !attachment.canRead())) {
+            System.out.println(
+                    "[SMTP] Oficio no enviado: falta un documento adjunto o no se puede leer.");
+            return false;
+        }
+
+        try {
+            Properties properties = new Properties();
+            properties.put("mail.smtp.host", SERVER);
+            properties.put("mail.smtp.port", String.valueOf(PORT_SMTP));
+            properties.put("mail.smtp.auth", "false");
+            properties.put("mail.smtp.starttls.enable", "false");
+            Session session = Session.getInstance(properties);
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(user_emisor));
+            message.setRecipient(Message.RecipientType.TO, new InternetAddress(receptor));
+            message.setSubject(subject.replaceAll("\\R+", " ").trim(), "UTF-8");
+
+            MimeBodyPart htmlPart = new MimeBodyPart();
+            htmlPart.setContent(htmlContent, "text/html; charset=UTF-8");
+            MimeMultipart multipart = new MimeMultipart("mixed");
+            multipart.addBodyPart(htmlPart);
+            for (File attachment : attachments) {
+                MimeBodyPart attachmentPart = new MimeBodyPart();
+                attachmentPart.setDataHandler(new DataHandler(new FileDataSource(attachment)));
+                attachmentPart.setFileName(MimeUtility.encodeText(
+                        attachment.getName(), "UTF-8", null));
+                multipart.addBodyPart(attachmentPart);
+            }
+            message.setContent(multipart);
+
+            try (javax.mail.Transport transport = session.getTransport("smtp")) {
+                transport.connect(SERVER, PORT_SMTP, null, null);
+                transport.sendMessage(message, message.getAllRecipients());
+            }
+            System.out.println("[SMTP] Oficio enviado exitosamente a CPD: " + receptor);
+            return true;
+        } catch (Exception ex) {
+            System.out.println("[SMTP] Oficio no enviado: " + mensajeErrorBreve(ex));
+            return false;
+        }
     }
 
   public void sendmail(String receptor, String subject) {
@@ -374,8 +516,7 @@ private boolean esEmailValido(String email) {
         System.out.println("Mensaje enviado");
 
     } catch (MessagingException ex) {
-        Logger.getLogger(SendEmail.class.getName()).log(Level.SEVERE, null, ex);
-        System.out.println("Correo no enviado");
+        System.out.println("Correo no enviado: error de comunicación con el servidor SMTP");
     }
 }
 
@@ -532,24 +673,32 @@ public String comandosHelp() {
             "Comandos Disponibles del Sistema",
             "CU1. GESTION DE USUARIOS Y ROLES:\n" +
             "  - usuario listar\n" +
-            "  - usuario agregar nombre,apellidos,ci,email,telefono,direccion,fecha_nac(yyyy-MM-dd),password\n" +
-            "  - usuario modificar id,nombre,apellidos,ci,email,telefono,direccion,fecha_nac,password,estado\n" +
-            "  - usuario eliminar id\n" +
-            "  - rol listar | rol agregar nombre,descripcion | rol asignar id_usuario,id_rol\n" +
-            "  - estudiante listar | estudiante agregar id_usuario,registro,id_carrera,semestre\n" +
-            "  - personal_carrera listar | personal_carrera agregar id_usuario,cargo,id_carrera\n" +
-            "  - director_carrera listar | director_carrera agregar id_usuario,id_carrera,gestion_inicio,gestion_fin\n\n" +
+            "  - estudiantes listar | academicos listar | directores listar | cpd listar\n" +
+            "  - estudiante agregar datos_personales,registro_universitario,id_carrera,semestre\n" +
+            "  - estudiante editar id,datos_personales,estado,registro_universitario,id_carrera,semestre\n" +
+            "  - academico agregar datos_personales,cargo,id_carrera | academico editar id,datos_personales,estado,cargo,id_carrera\n" +
+            "  - director agregar datos_personales,id_carrera,gestion_inicio,gestion_fin | director editar id,datos_personales,estado,id_carrera,gestion_inicio,gestion_fin\n" +
+            "  - cpd agregar datos_personales | cpd editar id,datos_personales,estado\n" +
+            "  Los roles se asignan automaticamente con cada alta.\n\n" +
             "CU2. SOLICITUD DE CASO ESPECIAL:\n" +
-            "  - solicitud listar\n" +
+            "  - solicitud listar periodo (Director/Personal Academico)\n" +
             "  - solicitud mis_casos [registro,password]\n" +
+            "  - solicitud pendientes listar,periodo (Director/Personal Academico)\n" +
             "  - solicitud pendientes [registro,password]\n" +
-            "  - solicitud registrar id_estudiante,id_periodo,tipo_caso,motivo\n" +
+            "  - solicitud periodos id_periodo_o_gestion (Director/Personal Academico)\n" +
+            "  - enviar solicitud gestion,tipo_caso,motivo (ejemplo: 2-2026,TIPO_CASO,motivo; estudiante identificado por correo)\n" +
+            "  - solicitar materia_grupo id_solicitud,periodo,sigla_materia,sigla_grupo,motivo (se puede repetir)\n" +
             "  - solicitud consultar id_solicitud\n" +
-            "  - solicitud_grupo agregar id_solicitud,id_grupo,motivo | solicitud_grupo listar id_solicitud\n" +
-            "  - archivo_solicitud agregar id_solicitud,nombre_archivo,tipo,ruta | archivo_solicitud listar id_solicitud\n\n" +
+            "  - solicitud_grupo listar id_solicitud\n" +
+            "  - archivo_solicitud adjuntar id_solicitud,tipo_documento (adjunte uno o varios archivos al correo)\n" +
+            "  - pago adjuntar id_solicitud,COMPROBANTE_PAGO (solicitud aceptada; adjunte exactamente un archivo)\n" +
+            "  - pago listar (alias: mis_pagos listar)\n" +
+            "  - archivo_solicitud listar id_solicitud\n\n" +
             "CU3. EVALUACION DIRECCION DE CARRERA:\n" +
+            "  - solicitud periodos id_periodo_o_gestion\n" +
+            "  - solicitud consultar id_solicitud (expediente con grupos y documentos; Director/Personal Académico recibe los archivos adjuntos)\n" +
             "  - evaluacion listar\n" +
-            "  - evaluacion registrar id_solicitud,id_evaluador,decision(APROBADA|RECHAZADA|OBSERVADA),justificacion,observaciones\n\n" +
+            "  - evaluacion registrar id_solicitud,APROBADA|RECHAZADA,motivo[,observaciones] (evaluador identificado por sesion)\n\n" +
             "CU4. CONTROL Y BLOQUEO DE CUPOS:\n" +
             "  - carrera listar | carrera agregar codigo,nombre,facultad\n" +
             "  - periodo listar | periodo agregar gestion,fecha_inicio,fecha_fin\n" +
@@ -557,14 +706,18 @@ public String comandosHelp() {
             "  - grupo listar | grupo consultar id_grupo\n" +
             "  - grupo agregar id_materia,id_periodo,sigla_grupo,docente,cupo_max,cupo_exc\n" +
             "  - bloqueo_grupo listar\n" +
-            "  - bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo,id_autorizador\n" +
+            "  - bloqueo_grupo bloquear id_grupo,id_solicitud,cantidad,motivo (Director/Academico identificado por sesion)\n" +
             "  - bloqueo_grupo liberar id_bloqueo,observacion\n\n" +
             "CU5. REMISION A CPD:\n" +
             "  - oficio_cpd listar\n" +
-            "  - oficio_cpd generar id_solicitud,destinatario,referencia,detalle,id_responsable\n\n" +
+            "  - oficio_cpd remitir gestion,correo_cpd,referencia,detalle (ejemplo: 2-2026; genera CSV y adjunta comprobantes de esa gestión)\n" +
+            "  - oficio_cpd generar id_oficio_pendiente (reintenta el envío)\n\n" +
             "CU6. CONFIRMACION Y HABILITACION CPD:\n" +
-            "  - respuesta_cpd listar\n" +
-            "  - respuesta_cpd registrar id_oficio,id_solicitud,resultado,respaldo,observaciones,id_responsable\n\n" +
+            "  - cpd pendientes (oficios y solicitudes remitidas sin respuesta)\n" +
+            "  - oficio_cpd consultar id_oficio (materias y nombres de comprobantes)\n" +
+            "  - cpd responder id_oficio,id_solicitud,HABILITADO|OBSERVADO|RECHAZADO,codigo_respuesta,observacion\n" +
+            "    Notifica al estudiante y al personal académico de la carrera.\n" +
+            "  - respuesta_cpd listar\n\n" +
             "CU7. HISTORIAL Y NOTIFICACIONES:\n" +
             "  - historial listar | historial consultar id_solicitud\n" +
             "  - notificacion listar\n\n" +

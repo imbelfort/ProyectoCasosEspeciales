@@ -10,15 +10,40 @@ import java.util.List;
 public class EstudianteDAO {
 
     public void create(Estudiante estudiante) throws SQLException {
+        try (Connection con = Conexion.getInstancia().EstablecerConexion()) {
+            if (con == null) {
+                throw new SQLException("No se pudo conectar con PostgreSQL.");
+            }
+            create(con, estudiante);
+        }
+    }
+
+    public void create(Connection con, Estudiante estudiante)
+            throws SQLException {
         String sql = "INSERT INTO estudiantes (id_estudiante, registro_universitario, carrera_id, semestre_actual) " +
                      "VALUES (?, ?, ?, ?)";
-        try (Connection con = Conexion.getInstancia().EstablecerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, estudiante.getIdEstudiante());
             ps.setString(2, estudiante.getRegistroUniversitario());
             ps.setInt(3, estudiante.getIdCarrera());
             ps.setInt(4, estudiante.getSemestreActual());
             ps.executeUpdate();
+        }
+    }
+
+    public void update(Connection con, Estudiante estudiante)
+            throws SQLException {
+        String sql = "UPDATE estudiantes SET registro_universitario = ?, " +
+                "carrera_id = ?, semestre_actual = ? WHERE id_estudiante = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, estudiante.getRegistroUniversitario());
+            ps.setInt(2, estudiante.getIdCarrera());
+            ps.setInt(3, estudiante.getSemestreActual());
+            ps.setInt(4, estudiante.getIdEstudiante());
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException(
+                        "No existe el perfil del estudiante indicado.");
+            }
         }
     }
 

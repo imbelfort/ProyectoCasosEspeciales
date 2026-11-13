@@ -59,4 +59,51 @@ public class NotificacionDAO {
         }
         return lista;
     }
+
+    public void registrarResultadoEnvio(
+            int idSolicitud,
+            String tipo,
+            boolean enviado,
+            String error
+    ) throws SQLException {
+        String sql = "UPDATE notificaciones SET estado = ?, " +
+                "intentos = intentos + 1, ultimo_error = ?, " +
+                "fecha_envio = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE fecha_envio END " +
+                "WHERE id_solicitud = ? AND tipo = ? " +
+                "AND id = (SELECT MAX(id) FROM notificaciones " +
+                "WHERE id_solicitud = ? AND tipo = ?)";
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, enviado ? "ENVIADO" : "PENDIENTE");
+            ps.setString(2, enviado ? null : error);
+            ps.setBoolean(3, enviado);
+            ps.setInt(4, idSolicitud);
+            ps.setString(5, tipo);
+            ps.setInt(6, idSolicitud);
+            ps.setString(7, tipo);
+            ps.executeUpdate();
+        }
+    }
+
+    public void registrarResultadoEnvio(
+            long idNotificacion,
+            boolean enviado,
+            String error
+    ) throws SQLException {
+        String sql = "UPDATE notificaciones SET estado = ?, intentos = intentos + 1, " +
+                "ultimo_error = ?, fecha_envio = CASE WHEN ? " +
+                "THEN CURRENT_TIMESTAMP ELSE fecha_envio END WHERE id = ?";
+        try (Connection con = Conexion.getInstancia().EstablecerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, enviado ? "ENVIADO" : "PENDIENTE");
+            ps.setString(2, enviado ? null : error);
+            ps.setBoolean(3, enviado);
+            ps.setLong(4, idNotificacion);
+            if (ps.executeUpdate() != 1) {
+                throw new SQLException(
+                        "No se encontró la notificación " + idNotificacion
+                        + " para guardar el resultado del envío.");
+            }
+        }
+    }
 }

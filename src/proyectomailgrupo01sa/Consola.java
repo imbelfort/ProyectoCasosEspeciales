@@ -3,16 +3,21 @@ package proyectomailgrupo01sa;
 import Comunication.Home;
 import Database.ConfigDB;
 import Database.ConfigEmailServer;
+import Database.Conexion;
 import Database.InicializarDB;
 import Utils.Email;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.Scanner;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Modo Consola / Terminal para el Servidor de Casos Especiales Académicos.
@@ -22,7 +27,15 @@ import java.util.Scanner;
  */
 public class Consola {
 
+    private static void cargarDriverJDBC() {
+        if (!Conexion.inicializarDriverJdbc()) {
+            System.err.println("[WARN] No se pudo cargar el driver JDBC de PostgreSQL.");
+        }
+    }
+
     public static void main(String[] args) {
+        cargarDriverJDBC();
+
         System.out.println("=================================================================");
         System.out.println("  SISTEMA DE CASOS ESPECIALES ACADÉMICOS - FICCT UAGRM (GRUPO 01 SA)");
         System.out.println("                     MODO TERMINAL / CONSOLA                     ");
@@ -33,9 +46,11 @@ public class Consola {
         // 1. Inicialización de la base de datos
         System.out.println("[INFO] Inicializando base de datos PostgreSQL...");
         try {
-            InicializarDB.crearTablasSiNoExisten();
-            InicializarDB.insertarDatosIniciales();
-            System.out.println("[OK] Base de datos verificada y lista.");
+            if (InicializarDB.inicializarSistema()) {
+                System.out.println("[OK] Base de datos verificada y lista.");
+            } else {
+                System.err.println("[ERROR] No se pudo conectar con PostgreSQL.");
+            }
         } catch (Exception e) {
             System.err.println("[WARN] No se pudo conectar a la BD o ya estaba inicializada: " + e.getMessage());
         }
@@ -44,7 +59,7 @@ public class Consola {
         System.out.println("[INFO] Iniciando demonio de monitoreo de correos POP3...");
         try {
             Home.iniciar();
-            System.out.println("[OK] Demonio de correo ACTIVO (cuenta: grupo01sa@tecnoweb.org.bo)");
+            System.out.println("[OK] Demonio de correo ACTIVO (cuenta: " + ConfigEmailServer.MAIL + ")");
             System.out.println("[OK] Revisando servidor cada 5 segundos.");
         } catch (Exception e) {
             System.err.println("[ERROR] Error al iniciar el hilo de correo: " + e.getMessage());
@@ -52,48 +67,23 @@ public class Consola {
 
         System.out.println("=================================================================");
         System.out.println("El sistema está activo respondiendo correos entrantes.");
-        System.out.println("Puede escribir comandos directamente en esta consola o 'exit' para salir.");
-        System.out.println("Comandos de ejemplo:");
-        System.out.println("  - help");
-        System.out.println("  - usuario listar");
-        System.out.println("  - solicitud listar");
-        System.out.println("  - grupo listar");
-        System.out.println("  - reporte general");
+        System.out.println("El servidor permanece activo y procesa comandos recibidos por correo.");
         System.out.println("=================================================================");
 
-        Scanner scanner = new Scanner(System.in);
-        String remitenteSimulado = "admin@uagrm.edu.bo";
-
-        while (true) {
-            System.out.print("\ncasos-especiales> ");
-            if (!scanner.hasNextLine()) {
-                break;
-            }
-            String linea = scanner.nextLine().trim();
-
-            if (linea.isEmpty()) {
-                continue;
-            }
-
-            if ("exit".equalsIgnoreCase(linea) || "salir".equalsIgnoreCase(linea) || "quit".equalsIgnoreCase(linea)) {
-                System.out.println("[INFO] Deteniendo servidor de consola. ¡Hasta luego!");
-                System.exit(0);
-                break;
-            }
-
-            try {
-                Email emailSimulado = new Email(remitenteSimulado, linea);
-                Home.interprete(emailSimulado);
-            } catch (Exception e) {
-                System.err.println("[ERROR] Ocurrió un error al procesar el comando: " + e.getMessage());
-            }
+        Runtime.getRuntime().addShutdownHook(new Thread(() ->
+                System.out.println("[INFO] Servidor detenido.")));
+        try {
+            new CountDownLatch(1).await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-
-        scanner.close();
     }
 
     private static void mostrarEstadoConexiones() {
         final String hostCorreo = ConfigEmailServer.HOST;
+        final int portSmtp = parsePort(ConfigEmailServer.PORT_SMTP, 25);
+        final int portPop3 = parsePort(ConfigEmailServer.PORT_POP3, 110);
+        final int portImap = parsePort(ConfigEmailServer.PORT_IMAP, 143);
         final int timeoutMs = 5000;
 
         System.out.println();
@@ -101,9 +91,9 @@ public class Consola {
         System.out.println("[INFO] Verificando servicios externos...");
 
         verificarBaseDeDatos();
-        verificarSocket("SMTP", hostCorreo, 25, timeoutMs);
-        verificarSocket("POP3", hostCorreo, 110, timeoutMs);
-        verificarSocket("IMAP", hostCorreo, 143, timeoutMs);
+        verificarSocket("SMTP", hostCorreo, portSmtp, timeoutMs);
+        verificarSocket("POP3", hostCorreo, portPop3, timeoutMs);
+        verificarSocket("IMAP", hostCorreo, portImap, timeoutMs);
 
         System.out.println("---------------------------------------------------------------");
         System.out.println();
@@ -111,7 +101,11 @@ public class Consola {
 
     private static void verificarBaseDeDatos() {
         try {
-            Class.forName(ConfigDB.DRIVER);
+            if (!Conexion.inicializarDriverJdbc()) {
+                System.err.println("[ERROR]  PostgreSQL | driver JDBC no encontrado: "
+                        + ConfigDB.DRIVER);
+                return;
+            }
             DriverManager.setLoginTimeout(5);
 
             try (Connection connection = DriverManager.getConnection(
@@ -121,8 +115,6 @@ public class Consola {
                 System.out.println("[OK]     PostgreSQL | " + ConfigDB.URL + ConfigDB.DB
                         + " | conexión establecida");
             }
-        } catch (ClassNotFoundException e) {
-            System.err.println("[ERROR]  PostgreSQL | driver JDBC no encontrado: " + e.getMessage());
         } catch (Exception e) {
             System.err.println("[ERROR]  PostgreSQL | no disponible: " + describirError(e));
         }
@@ -158,5 +150,13 @@ public class Consola {
             return error.getClass().getSimpleName();
         }
         return mensaje.trim();
+    }
+
+    private static int parsePort(String value, int fallback) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 }

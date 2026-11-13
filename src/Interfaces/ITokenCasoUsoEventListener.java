@@ -30,6 +30,8 @@ public interface ITokenCasoUsoEventListener {
 
     void archivoSolicitud(TokenEvent event);
 
+    void pago(TokenEvent event);
+
     void evaluacion(TokenEvent event);
 
     void bloqueoGrupo(TokenEvent event);

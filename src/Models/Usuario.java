@@ -1,9 +1,11 @@
+
 package Models;
 
 import java.sql.Date;
 import java.sql.Timestamp;
 
 public class Usuario {
+
     private int idUsuario;
     private String nombre;
     private String apellidos;
@@ -14,7 +16,7 @@ public class Usuario {
     private String fotoPerfil;
     private String usuarioSistema;
     private String contrasena;
-    private String estado; // ACTIVO, INACTIVO, BLOQUEADO
+    private String estado;
     private Date fechaNacimiento;
     private Timestamp fechaCreacion;
     private Timestamp fechaModificacion;
@@ -23,9 +25,22 @@ public class Usuario {
         this.estado = "ACTIVO";
     }
 
-    public Usuario(int idUsuario, String nombre, String apellidos, String ci, String email, String telefono,
-                   String direccion, String fotoPerfil, String usuarioSistema, String contrasena, String estado,
-                   Date fechaNacimiento, Timestamp fechaCreacion, Timestamp fechaModificacion) {
+    public Usuario(
+            int idUsuario,
+            String nombre,
+            String apellidos,
+            String ci,
+            String email,
+            String telefono,
+            String direccion,
+            String fotoPerfil,
+            String usuarioSistema,
+            String contrasena,
+            String estado,
+            Date fechaNacimiento,
+            Timestamp fechaCreacion,
+            Timestamp fechaModificacion
+    ) {
         this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.apellidos = apellidos;
@@ -36,7 +51,7 @@ public class Usuario {
         this.fotoPerfil = fotoPerfil;
         this.usuarioSistema = usuarioSistema;
         this.contrasena = contrasena;
-        this.estado = estado != null ? estado : "ACTIVO";
+        this.estado = estado == null ? "ACTIVO" : estado;
         this.fechaNacimiento = fechaNacimiento;
         this.fechaCreacion = fechaCreacion;
         this.fechaModificacion = fechaModificacion;
@@ -114,6 +129,7 @@ public class Usuario {
         this.usuarioSistema = usuarioSistema;
     }
 
+    // Este campo debe contener un HASH al persistirse.
     public String getContrasena() {
         return contrasena;
     }
@@ -156,15 +172,13 @@ public class Usuario {
 
     @Override
     public String toString() {
+        // Nunca incluir contrasenas, hashes ni datos sensibles.
         return "Usuario{" +
                 "idUsuario=" + idUsuario +
                 ", nombre='" + nombre + '\'' +
                 ", apellidos='" + apellidos + '\'' +
-                ", ci='" + ci + '\'' +
                 ", email='" + email + '\'' +
-                ", telefono='" + telefono + '\'' +
                 ", estado='" + estado + '\'' +
-                ", usuarioSistema='" + usuarioSistema + '\'' +
                 '}';
     }
 }

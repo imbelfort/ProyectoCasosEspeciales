@@ -1,93 +1,144 @@
 package Services;
 
 import DAO.EvaluacionSolicitudDAO;
-import DAO.HistorialSolicitudDAO;
 import DAO.NotificacionDAO;
-import DAO.SolicitudDAO;
 import Models.EvaluacionSolicitud;
-import Models.HistorialSolicitud;
-import Models.Notificacion;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 
 public class EvaluacionService {
 
-    private EvaluacionSolicitudDAO evaluacionDAO;
-    private SolicitudDAO solicitudDAO;
-    private HistorialSolicitudDAO historialDAO;
-    private NotificacionDAO notificacionDAO;
+    private final EvaluacionSolicitudDAO evaluacionDAO;
+    private final NotificacionDAO notificacionDAO;
+
+    public record ResultadoEvaluacion(
+            int idSolicitud,
+            String codigoSolicitud,
+            String nuevoEstado,
+            String decision,
+            String motivo,
+            String correoEstudiante
+    ) {}
 
     public EvaluacionService() {
         this.evaluacionDAO = new EvaluacionSolicitudDAO();
-        this.solicitudDAO = new SolicitudDAO();
-        this.historialDAO = new HistorialSolicitudDAO();
         this.notificacionDAO = new NotificacionDAO();
     }
 
-    public void evaluarSolicitud(List<String> params, String remitenteEmail) throws SQLException {
-        if (params.size() < 4) {
+    public ResultadoEvaluacion evaluarSolicitud(
+            List<String> params,
+            int idEvaluador
+    )
+            throws SQLException {
+        if (params == null || params.size() < 3) {
             throw new IllegalArgumentException(
-                    "Formato: evaluacion registrar id_solicitud,id_evaluador,decision(APROBADA|RECHAZADA|OBSERVADA),justificacion,observaciones?"
-            );
-        }
-        int idSol = Integer.parseInt(params.get(0).trim());
-        int idEvaluador = Integer.parseInt(params.get(1).trim());
-        String decision = params.get(2).trim().toUpperCase();
-        String justificacion = params.get(3).trim();
-        String observaciones = params.size() > 4 ? params.get(4).trim() : "";
-
-        String estadoAnterior = solicitudDAO.getEstado(idSol);
-        if (estadoAnterior == null) {
-            throw new SQLException("La solicitud con id " + idSol + " no existe.");
+                    "Formato: evaluacion registrar id_solicitud,decision(APROBADA|RECHAZADA),motivo[,observaciones].");
         }
 
-        String nuevoEstado;
-        if ("APROBADA".equalsIgnoreCase(decision)) {
-            nuevoEstado = "APROBADA_DIRECCION";
-        } else if ("RECHAZADA".equalsIgnoreCase(decision)) {
-            nuevoEstado = "RECHAZADA_DIRECCION";
-        } else if ("OBSERVADA".equalsIgnoreCase(decision)) {
-            nuevoEstado = "OBSERVADA";
+        int idSolicitud;
+        try {
+            idSolicitud = Integer.parseInt(params.get(0).trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "El ID de la solicitud debe ser un número entero.", ex);
+        }
+
+        int indiceDecision = 1;
+        if (params.size() >= 4
+                && esNumero(params.get(1))
+                && esDecision(params.get(2))) {
+            indiceDecision = 2;
+        }
+
+        String decision = normalizarDecision(params.get(indiceDecision));
+        if (!"APROBADA".equals(decision) && !"RECHAZADA".equals(decision)
+                && !"OBSERVADA".equals(decision)) {
+            throw new IllegalArgumentException(
+                    "Decisión inválida. Use APROBADA, RECHAZADA u OBSERVADA.");
+        }
+
+        int indiceMotivo = indiceDecision + 1;
+        if (params.size() <= indiceMotivo
+                || params.get(indiceMotivo).trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "El motivo de la decisión es obligatorio.");
+        }
+
+        String motivo;
+        String observaciones = "";
+        if (params.size() == indiceMotivo + 2) {
+            motivo = params.get(indiceMotivo).trim();
+            observaciones = params.get(indiceMotivo + 1).trim();
         } else {
-            throw new IllegalArgumentException("Decision invalida. Use APROBADA, RECHAZADA u OBSERVADA.");
+            motivo = String.join(", ",
+                    params.subList(indiceMotivo, params.size())).trim();
         }
 
-        // Registrar evaluación
-        EvaluacionSolicitud ev = new EvaluacionSolicitud(0, idSol, idEvaluador, decision, justificacion, observaciones, null);
-        evaluacionDAO.create(ev);
+        String nuevoEstado = "APROBADA".equals(decision)
+                ? "APROBADA_DIRECCION"
+                : "RECHAZADA".equals(decision) ? "RECHAZADA_DIRECCION" : "OBSERVADA";
+        EvaluacionSolicitud evaluacion = new EvaluacionSolicitud(
+                0, idSolicitud, idEvaluador, decision, motivo, observaciones, null);
+        EvaluacionSolicitudDAO.ResultadoResolucion resultado =
+                evaluacionDAO.registrarResolucion(evaluacion, nuevoEstado);
+        return new ResultadoEvaluacion(
+                idSolicitud,
+                resultado.codigoSolicitud(),
+                nuevoEstado,
+                decision,
+                motivo,
+                resultado.correoEstudiante());
+    }
 
-        // Actualizar solicitud
-        solicitudDAO.updateEstado(idSol, nuevoEstado, idEvaluador, observaciones, "RECHAZADA".equals(decision) ? justificacion : null);
-
-        // Registrar historial (CU7)
-        HistorialSolicitud hist = new HistorialSolicitud();
-        hist.setIdSolicitud(idSol);
-        hist.setIdUsuario(idEvaluador);
-        hist.setEstadoAnterior(estadoAnterior);
-        hist.setEstadoNuevo(nuevoEstado);
-        hist.setAccion("EVALUACION_DIRECCION");
-        hist.setObservacion("Dirección de Carrera resolvió: " + decision + ". Justificación: " + justificacion);
-        historialDAO.create(hist);
-
-        // Notificación al estudiante (CU7)
-        Notificacion notif = new Notificacion();
-        notif.setIdSolicitud(idSol);
-        notif.setIdUsuario(idEvaluador);
-        notif.setDestinatario(remitenteEmail != null ? remitenteEmail : "estudiante@uagrm.edu.bo");
-        notif.setTipo("RESULTADO_EVALUACION");
-        notif.setAsunto("Evaluacion Direccion de Carrera - Solicitud ID " + idSol);
-        notif.setMensaje("Su solicitud fue evaluada con estado " + nuevoEstado + ". Justificacion: " + justificacion);
-        notificacionDAO.create(notif);
+    public void registrarResultadoNotificacion(
+            int idSolicitud,
+            boolean enviado,
+            String error
+    ) throws SQLException {
+        notificacionDAO.registrarResultadoEnvio(
+                idSolicitud, "RESULTADO_EVALUACION", enviado, error);
     }
 
     public List<String[]> listarEvaluaciones() throws SQLException {
         return evaluacionDAO.listAll();
     }
 
+    public List<String[]> listarEvaluacionesSolicitud(int idSolicitud)
+            throws SQLException {
+        return evaluacionDAO.listBySolicitud(idSolicitud);
+    }
+
     public String getComandosEvaluacion() {
         return "Comandos CU3 - Evaluación por Dirección de Carrera:\n" +
                 "- evaluacion listar\n" +
-                "- evaluacion registrar id_solicitud,id_evaluador,decision,justificacion,observaciones";
+                "- solicitud periodos id_periodo_o_gestion\n" +
+                "- solicitud consultar id_solicitud\n" +
+                "- evaluacion registrar id_solicitud,APROBADA|RECHAZADA|OBSERVADA,motivo[,observaciones]";
+    }
+
+    private boolean esNumero(String valor) {
+        try {
+            Integer.parseInt(valor.trim());
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
+    private boolean esDecision(String valor) {
+        String decision = normalizarDecision(valor);
+        return "APROBADA".equals(decision) || "RECHAZADA".equals(decision)
+                || "OBSERVADA".equals(decision);
+    }
+
+    private String normalizarDecision(String valor) {
+        String decision = valor.trim().toUpperCase(Locale.ROOT);
+        return switch (decision) {
+            case "ACEPTADO", "ACEPTADA" -> "APROBADA";
+            case "RECHAZADO" -> "RECHAZADA";
+            default -> decision;
+        };
     }
 }

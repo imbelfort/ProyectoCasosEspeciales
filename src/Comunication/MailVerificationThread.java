@@ -1,6 +1,7 @@
 package Comunication;
 
 import Interfaces.IEmailEventListener;
+import Database.ConfigEmailServer;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -16,13 +17,13 @@ import Utils.Extractor;
 
 public class MailVerificationThread implements Runnable {
 
-    private final static int PORT_POP = 110;
-    private final static int PORT_IMAP = 143;
-    private final static int PORT_SMTP = 25;
+    private final static int PORT_POP = parsePort(ConfigEmailServer.PORT_POP3, 110);
+    private final static int PORT_IMAP = parsePort(ConfigEmailServer.PORT_IMAP, 143);
+    private final static int PORT_SMTP = parsePort(ConfigEmailServer.PORT_SMTP, 25);
 
-    private final static String HOST = "mail.tecnoweb.org.bo";
-    private final static String USER = "grupo01sa";
-    private final static String PASSWORD = "grup001grup001*";
+    private final static String HOST = ConfigEmailServer.HOST;
+    private final static String USER = ConfigEmailServer.USER;
+    private final static String PASSWORD = ConfigEmailServer.PASSWORD;
 
     private final static int CONNECT_TIMEOUT_MS = 5000;
     private final static int LOOP_DELAY_MS = 5000;
@@ -352,6 +353,13 @@ public class MailVerificationThread implements Runnable {
     }
 
     private void logProtocol(String protocol, String direction, String message) {
-        System.out.println("[" + protocol + "][" + direction + "] " + message);
+    }
+
+    private static int parsePort(String value, int fallback) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 }

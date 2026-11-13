@@ -110,10 +110,8 @@ public class Analex {
     private void dt(){
         int status = 0;
         int index = -1;
-        System.out.println("DEBUG Analex.dt() iniciando...");
         while(true){
             char c = cinta.CC();
-            System.out.println("DEBUG dt() - status=" + status + ", char=[" + c + "] (ASCII " + (int)c + "), ac=[" + ac + "]");
             switch(status){
                 case 0:
                     if(isSpace(c)){
@@ -165,7 +163,6 @@ public class Analex {
                     break;
 
                 case 2:
-                    System.out.println("DEBUG dt() - Estado 2: Retornando token con ac=[" + ac + "]");
                     R = new Token(ac);
                     lastTokenType = R.getName(); // Track token type for syntax flow
                     // If this is an ACTION token, next letters should be parameters

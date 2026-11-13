@@ -76,6 +76,11 @@ public class HtmlBuilder {
             "ID", "ID_SOLICITUD", "NOMBRE_ARCHIVO", "TIPO", "FECHA_SUBIDA"
     };
 
+    public static final String[] HEADERS_PAGO = {
+            "ID", "ID_SOLICITUD", "CODIGO_SOLICITUD", "GESTION",
+            "COMPROBANTE", "TIPO", "FECHA_SUBIDA", "ESTADO_SOLICITUD"
+    };
+
     public static final String[] HEADERS_EVALUACION = {
             "ID", "SOLICITUD", "EVALUADOR", "DECISION", "JUSTIFICACION", "OBSERVACIONES", "FECHA_EVALUACION"
     };
@@ -85,11 +90,22 @@ public class HtmlBuilder {
     };
 
     public static final String[] HEADERS_OFICIO_CPD = {
-            "ID", "NUM_OFICIO", "SOLICITUD", "DESTINATARIO", "REFERENCIA", "RESPONSABLE", "FECHA_REMISION", "ESTADO"
+            "ID", "NUM_OFICIO", "SOLICITUD", "PERIODO", "DESTINATARIO", "REFERENCIA", "RESPONSABLE", "FECHA_REMISION", "ESTADO"
+    };
+
+    public static final String[] HEADERS_SOLICITUDES_OFICIO_CPD = {
+            "ID_SOLICITUD", "CODIGO", "ESTUDIANTE", "PERIODO",
+            "MATERIAS Y GRUPOS", "COMPROBANTES", "ESTADO"
+    };
+
+    public static final String[] HEADERS_PENDIENTES_CPD = {
+            "ID_OFICIO", "NUMERO_OFICIO", "ID_SOLICITUD", "CODIGO_SOLICITUD",
+            "ESTUDIANTE", "PERIODO", "ESTADO"
     };
 
     public static final String[] HEADERS_RESPUESTA_CPD = {
-            "ID", "NUM_OFICIO", "SOLICITUD", "COD_RESPUESTA", "RESULTADO", "RESPALDO", "FECHA_RESPUESTA", "FECHA_HABILITACION", "OBSERVACIONES"
+            "ID", "NUM_OFICIO", "SOLICITUD", "COD_RESPUESTA", "RESULTADO",
+            "RESPONSABLE_CPD", "FECHA_RESPUESTA", "FECHA_HABILITACION", "OBSERVACIONES"
     };
 
     public static final String[] HEADERS_HISTORIAL = {
@@ -223,6 +239,92 @@ public class HtmlBuilder {
         return sb.toString();
     }
 
+    public static String generarDetalleSolicitud(
+            String[] solicitud,
+            List<String[]> grupos,
+            List<String[]> documentos,
+            List<String[]> evaluaciones
+    ) {
+        String codigo = solicitud != null && solicitud.length > 1
+                ? solicitud[1] : "";
+        StringBuilder sb = new StringBuilder();
+        sb.append(HTML_OPEN).append(HEAD_CONTENT);
+        sb.append("<body style='margin: 0; padding: 20px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif;'>");
+        sb.append("<div style='max-width: 960px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(15,23,42,0.08); border: 1px solid #e2e8f0;'>");
+        sb.append(getHeaderHtml("EXPEDIENTE", "Solicitud de Caso Especial"));
+        sb.append("<div style='padding: 24px 26px;'>");
+        sb.append("<h2 style='color: #0f172a; font-size: 17px; margin: 0 0 18px; padding-bottom: 12px; border-bottom: 2px solid #f1f5f9;'>")
+                .append("Detalle de solicitud ").append(escapeHtml(codigo)).append("</h2>");
+
+        if (solicitud != null) {
+            String[] labels = {
+                "ID", "CÓDIGO", "ESTUDIANTE", "REGISTRO", "PERÍODO",
+                "TIPO DE CASO", "ESTADO", "FECHA DE SOLICITUD", "MOTIVO",
+                "OBSERVACIONES", "MOTIVO DE RECHAZO"
+            };
+            sb.append("<h3 style='color: #1e3a8a; font-size: 14px; margin: 20px 0 10px;'>Datos de la solicitud</h3>");
+            sb.append("<table style='width: 100%; border: 1px solid #e2e8f0; border-collapse: collapse; font-size: 12px;'>");
+            for (int i = 0; i < labels.length; i++) {
+                String valor = i < solicitud.length && solicitud[i] != null
+                        ? solicitud[i] : "";
+                String fondo = i % 2 == 0 ? "#f8fafc" : "#ffffff";
+                sb.append("<tr style='background: ").append(fondo).append(";'>")
+                        .append("<th style='width: 22%; padding: 9px 12px; text-align: left; color: #475569; border-bottom: 1px solid #e2e8f0;'>")
+                        .append(escapeHtml(labels[i])).append("</th>")
+                        .append("<td style='padding: 9px 12px; color: #1e293b; border-bottom: 1px solid #e2e8f0; white-space: pre-wrap;'>")
+                        .append(formatearValor(valor)).append("</td></tr>");
+            }
+            sb.append("</table>");
+        }
+
+        appendTablaExpediente(sb, "Materias y grupos solicitados",
+                HEADERS_SOLICITUD_GRUPO, grupos);
+        appendTablaExpediente(sb, "Documentos adjuntos",
+                HEADERS_ARCHIVO_SOLICITUD, documentos);
+        appendTablaExpediente(sb, "Evaluaciones de Dirección",
+                HEADERS_EVALUACION, evaluaciones);
+
+        sb.append(getFooterHtml());
+        sb.append("</div></div></body>").append(HTML_CLOSE);
+        return sb.toString();
+    }
+
+    private static void appendTablaExpediente(
+            StringBuilder sb,
+            String titulo,
+            String[] headers,
+            List<String[]> filas
+    ) {
+        sb.append("<h3 style='color: #1e3a8a; font-size: 14px; margin: 24px 0 10px;'>")
+                .append(escapeHtml(titulo)).append("</h3>");
+        if (filas == null || filas.isEmpty()) {
+            sb.append("<div style='padding: 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; color: #64748b; font-size: 12px;'>")
+                    .append("No hay registros asociados.").append("</div>");
+            return;
+        }
+        sb.append("<div style='overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px;'>")
+                .append("<table style='width: 100%; border-collapse: collapse; font-size: 12px;'>")
+                .append("<thead><tr style='background: #0f172a; color: #ffffff;'>");
+        for (String header : headers) {
+            sb.append("<th style='padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase;'>")
+                    .append(escapeHtml(header)).append("</th>");
+        }
+        sb.append("</tr></thead><tbody>");
+        boolean alternar = false;
+        for (String[] fila : filas) {
+            sb.append("<tr style='background: ")
+                    .append(alternar ? "#f8fafc" : "#ffffff").append(";'>");
+            for (int i = 0; i < headers.length; i++) {
+                String valor = fila != null && i < fila.length ? fila[i] : "";
+                sb.append("<td style='padding: 9px 12px; border-top: 1px solid #e2e8f0; color: #334155; vertical-align: top;'>")
+                        .append(formatearValor(valor)).append("</td>");
+            }
+            sb.append("</tr>");
+            alternar = !alternar;
+        }
+        sb.append("</tbody></table></div>");
+    }
+
     // ============================================================
     // 2. CONSTRUCCIÓN DE MENSAJE DE ÉXITO
     // ============================================================
@@ -259,6 +361,155 @@ public class HtmlBuilder {
         sb.append("</div>"); // Fin container
         sb.append("</body>");
         sb.append(HTML_CLOSE);
+        return sb.toString();
+    }
+
+    public static String generarResultadoEvaluacion(
+            int idSolicitud,
+            String codigo,
+            String decision,
+            String estado,
+            String motivo
+    ) {
+        boolean aceptada = "APROBADA".equalsIgnoreCase(decision);
+        boolean observada = "OBSERVADA".equalsIgnoreCase(decision);
+        String color = aceptada ? "#166534" : observada ? "#854d0e" : "#991b1b";
+        String fondo = aceptada ? "#f0fdf4" : observada ? "#fefce8" : "#fff1f2";
+        String borde = aceptada ? "#16a34a" : observada ? "#eab308" : "#e11d48";
+        String titulo = aceptada ? "Solicitud aceptada"
+                : observada ? "Solicitud observada" : "Solicitud rechazada";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(HTML_OPEN).append(HEAD_CONTENT);
+        sb.append("<body style='margin:0;padding:20px;background:#f1f5f9;font-family:Arial,sans-serif;'>")
+                .append("<div style='max-width:680px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>")
+                .append(getHeaderHtml("RESULTADO", "Evaluación de Caso Especial"))
+                .append("<div style='padding:26px;'>")
+                .append("<div style='background:").append(fondo)
+                .append(";border-left:6px solid ").append(borde)
+                .append(";padding:18px;border-radius:8px;'>")
+                .append("<h2 style='margin:0 0 10px;color:").append(color).append(";'>")
+                .append(escapeHtml(titulo)).append("</h2>")
+                .append("<p style='margin:6px 0;color:#334155;'><b>Código:</b> ")
+                .append(escapeHtml(codigo)).append("</p>")
+                .append("<p style='margin:6px 0;color:#334155;'><b>Estado:</b> ")
+                .append(escapeHtml(estado)).append("</p>")
+                .append("<p style='margin:12px 0 0;color:#334155;'><b>Motivo:</b><br>")
+                .append(escapeHtml(motivo)).append("</p></div>");
+        if (aceptada) {
+            sb.append("<p style='margin-top:18px;color:#475569;font-size:13px;'>"
+                    + "Puede adjuntar su comprobante de pago respondiendo con el asunto "
+                    + "<code>pago adjuntar ")
+                    .append(idSolicitud)
+                    .append(",COMPROBANTE_PAGO</code> e incluyendo el comprobante como archivo adjunto.</p>");
+        }
+        sb.append(getFooterHtml()).append("</div></div></body>").append(HTML_CLOSE);
+        return sb.toString();
+    }
+
+    public static String generarNotificacionRemisionCpd(
+            String numeroOficio,
+            String periodo,
+            String referencia,
+            String detalle,
+            int cantidadSolicitudes
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(HTML_OPEN).append(HEAD_CONTENT)
+                .append("<body style='margin:0;padding:20px;background:#f1f5f9;font-family:Arial,sans-serif;'>")
+                .append("<div style='max-width:680px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>")
+                .append(getHeaderHtml("CU5", "Remisión a CPD"))
+                .append("<div style='padding:26px;color:#334155;'>")
+                .append("<h2 style='margin-top:0;color:#166534;'>Oficio remitido</h2>")
+                .append("<p>Se adjunta el oficio con el listado de solicitudes aceptadas y sus comprobantes de pago.</p>")
+                .append("<table style='width:100%;border-collapse:collapse;font-size:14px;'>")
+                .append("<tr><td style='padding:8px;border:1px solid #e2e8f0;'><b>Número de oficio</b></td><td style='padding:8px;border:1px solid #e2e8f0;'>")
+                .append(escapeHtml(numeroOficio)).append("</td></tr>")
+                .append("<tr><td style='padding:8px;border:1px solid #e2e8f0;'><b>Período académico</b></td><td style='padding:8px;border:1px solid #e2e8f0;'>")
+                .append(escapeHtml(periodo)).append("</td></tr>")
+                .append("<tr><td style='padding:8px;border:1px solid #e2e8f0;'><b>Referencia</b></td><td style='padding:8px;border:1px solid #e2e8f0;'>")
+                .append(escapeHtml(referencia)).append("</td></tr>")
+                .append("<tr><td style='padding:8px;border:1px solid #e2e8f0;'><b>Solicitudes</b></td><td style='padding:8px;border:1px solid #e2e8f0;'>")
+                .append(cantidadSolicitudes).append("</td></tr>")
+                .append("<tr><td style='padding:8px;border:1px solid #e2e8f0;'><b>Detalle</b></td><td style='padding:8px;border:1px solid #e2e8f0;'>")
+                .append(escapeHtml(detalle)).append("</td></tr></table>")
+                .append(getFooterHtml()).append("</div></div></body>")
+                .append(HTML_CLOSE);
+        return sb.toString();
+    }
+
+    public static String generarNotificacionHabilitacionCpd(
+            String codigoSolicitud,
+            String numeroOficio,
+            String periodo,
+            String detalle
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(HTML_OPEN).append(HEAD_CONTENT)
+                .append("<body style='margin:0;padding:20px;background:#f1f5f9;font-family:Arial,sans-serif;'>")
+                .append("<div style='max-width:680px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>")
+                .append(getHeaderHtml("CU6", "Confirmación de CPD"))
+                .append("<div style='padding:26px;color:#334155;'>")
+                .append("<div style='background:#f0fdf4;border-left:6px solid #16a34a;padding:18px;border-radius:8px;'>")
+                .append("<h2 style='margin:0 0 10px;color:#166534;'>Materias habilitadas e inscripción confirmada</h2>")
+                .append("<p style='margin:6px 0;'><b>Solicitud:</b> ")
+                .append(escapeHtml(codigoSolicitud)).append("</p>")
+                .append("<p style='margin:6px 0;'><b>Oficio:</b> ")
+                .append(escapeHtml(numeroOficio)).append("</p>")
+                .append("<p style='margin:6px 0;'><b>Período académico:</b> ")
+                .append(escapeHtml(periodo)).append("</p>")
+                .append("<p style='margin:6px 0;'><b>Detalle de la confirmación:</b><br>")
+                .append(escapeHtml(detalle)).append("</p></div>")
+                .append("<p style='margin-top:18px;'>El Centro de Procesamiento de Datos confirmó que las materias de su solicitud ya fueron habilitadas e inscritas.</p>")
+                .append(getFooterHtml()).append("</div></div></body>")
+                .append(HTML_CLOSE);
+        return sb.toString();
+    }
+
+    public static String generarNotificacionResultadoCpd(
+            String codigoSolicitud,
+            String numeroOficio,
+            String periodo,
+            String resultado,
+            String codigoRespuesta,
+            String observacion
+    ) {
+        boolean habilitada = "HABILITADO".equals(resultado);
+        boolean observada = "OBSERVADO".equals(resultado);
+        String color = habilitada ? "#166534" : observada ? "#854d0e" : "#991b1b";
+        String fondo = habilitada ? "#f0fdf4" : observada ? "#fefce8" : "#fff1f2";
+        String borde = habilitada ? "#16a34a" : observada ? "#eab308" : "#e11d48";
+        String titulo = habilitada ? "Materias habilitadas e inscritas"
+                : observada ? "Solicitud observada por CPD" : "Solicitud rechazada por CPD";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(HTML_OPEN).append(HEAD_CONTENT)
+                .append("<body style='margin:0;padding:20px;background:#f1f5f9;font-family:Arial,sans-serif;'>")
+                .append("<div style='max-width:680px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>")
+                .append(getHeaderHtml("CU6", "Respuesta del CPD"))
+                .append("<div style='padding:26px;color:#334155;'>")
+                .append("<div style='background:").append(fondo)
+                .append(";border-left:6px solid ").append(borde)
+                .append(";padding:18px;border-radius:8px;'>")
+                .append("<h2 style='margin:0 0 12px;color:").append(color).append(";'>")
+                .append(escapeHtml(titulo)).append("</h2>")
+                .append("<p><b>Solicitud:</b> ").append(escapeHtml(codigoSolicitud)).append("</p>")
+                .append("<p><b>Oficio:</b> ").append(escapeHtml(numeroOficio)).append("</p>")
+                .append("<p><b>Período:</b> ").append(escapeHtml(periodo)).append("</p>")
+                .append("<p><b>Resultado:</b> ").append(escapeHtml(resultado)).append("</p>")
+                .append("<p><b>Código de respuesta:</b> ")
+                .append(escapeHtml(codigoRespuesta)).append("</p>")
+                .append("<p><b>Observación:</b><br>")
+                .append(escapeHtml(observacion)).append("</p></div>")
+                .append("<p style='margin-top:18px;'>")
+                .append(habilitada
+                        ? "CPD informa que las materias de esta solicitud ya fueron habilitadas e inscritas en el sistema académico oficial."
+                        : observada
+                                ? "La solicitud requiere revisión por Dirección de Carrera."
+                                : "CPD informó que no fue posible habilitar las materias de esta solicitud.")
+                .append("</p>")
+                .append(getFooterHtml()).append("</div></div></body>")
+                .append(HTML_CLOSE);
         return sb.toString();
     }
 

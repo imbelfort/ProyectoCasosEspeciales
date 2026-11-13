@@ -1,102 +1,228 @@
 package Services;
 
-import DAO.HistorialSolicitudDAO;
+import Comunication.HtmlBuilder;
+import Comunication.SendEmail;
 import DAO.NotificacionDAO;
+import DAO.OficioCpdDAO;
 import DAO.OficioRespuestaCpdDAO;
-import DAO.SolicitudDAO;
-import Models.HistorialSolicitud;
-import Models.Notificacion;
 import Models.OficioRespuestaCpd;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.SQLException;
-import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class RespuestaCpdService {
 
-    private OficioRespuestaCpdDAO respuestaDAO;
-    private SolicitudDAO solicitudDAO;
-    private HistorialSolicitudDAO historialDAO;
-    private NotificacionDAO notificacionDAO;
+    public record ResultadoRespuesta(
+            String codigoSolicitud,
+            String numeroOficio,
+            String periodo,
+            String resultado,
+            String estado,
+            String codigoRespuesta,
+            String observacion,
+            int academicosNotificados,
+            int correosEnviados,
+            int correosPendientes,
+            boolean estadosEnvioActualizados
+    ) {}
 
-    public RespuestaCpdService() {
-        this.respuestaDAO = new OficioRespuestaCpdDAO();
-        this.solicitudDAO = new SolicitudDAO();
-        this.historialDAO = new HistorialSolicitudDAO();
-        this.notificacionDAO = new NotificacionDAO();
+    private final OficioRespuestaCpdDAO respuestaDAO = new OficioRespuestaCpdDAO();
+    private final OficioCpdDAO oficioDAO = new OficioCpdDAO();
+    private final NotificacionDAO notificacionDAO = new NotificacionDAO();
+
+    public ResultadoRespuesta responder(
+            List<String> params,
+            int idResponsableCpd
+    ) throws SQLException {
+        if (params == null || params.size() < 5) {
+            throw new IllegalArgumentException(
+                    "Formato: cpd responder "
+                    + "id_oficio,id_solicitud,resultado,codigo_respuesta,observacion");
+        }
+        int idOficio = parsearId(params.get(0), "El ID del oficio");
+        int idSolicitud = parsearId(params.get(1), "El ID de la solicitud");
+        String resultado = normalizarResultado(params.get(2));
+        String codigo = params.get(3).trim();
+        if (codigo.isEmpty() || codigo.length() > 50 || codigo.matches(".*[\\r\\n].*")) {
+            throw new IllegalArgumentException(
+                    "El código de respuesta CPD es obligatorio y debe tener hasta 50 caracteres.");
+        }
+        String observacion = String.join(", ", params.subList(4, params.size())).trim();
+        if (observacion.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "La observación debe describir el resultado del procedimiento realizado por CPD.");
+        }
+
+        OficioRespuestaCpd respuesta = new OficioRespuestaCpd();
+        respuesta.setIdOficio(idOficio);
+        respuesta.setIdSolicitud(idSolicitud);
+        respuesta.setResultado(resultado);
+        respuesta.setEstado(estadoDe(resultado));
+        respuesta.setCodigoRespuesta(codigo);
+        respuesta.setObservaciones(observacion);
+        respuesta.setIdResponsableCpd(idResponsableCpd);
+
+        OficioRespuestaCpdDAO.ResultadoRespuesta guardada =
+                respuestaDAO.registrarRespuesta(respuesta);
+        String html = HtmlBuilder.generarNotificacionResultadoCpd(
+                guardada.codigoSolicitud(),
+                guardada.numeroOficio(),
+                guardada.periodo(),
+                resultado,
+                codigo,
+                observacion);
+
+        int enviados = 0;
+        int pendientes = 0;
+        boolean estadosActualizados = true;
+        SendEmail email = new SendEmail();
+        for (OficioRespuestaCpdDAO.DestinatarioNotificacion destinatario
+                : guardada.destinatarios()) {
+            String asunto = "Respuesta CPD " + resultado
+                    + " - Solicitud " + guardada.codigoSolicitud();
+            boolean enviado = email.sendmailDirect(
+                    destinatario.email(), asunto, html);
+            if (enviado) {
+                enviados++;
+            } else {
+                pendientes++;
+            }
+            try {
+                notificacionDAO.registrarResultadoEnvio(
+                        destinatario.idNotificacion(),
+                        enviado,
+                        enviado ? null : "No se pudo entregar el correo por SMTP.");
+            } catch (SQLException ex) {
+                estadosActualizados = false;
+                System.err.println(
+                        "[CU6] No se pudo actualizar el envío de notificación "
+                        + destinatario.idNotificacion() + ": " + ex.getMessage());
+            }
+        }
+        return new ResultadoRespuesta(
+                guardada.codigoSolicitud(),
+                guardada.numeroOficio(),
+                guardada.periodo(),
+                resultado,
+                guardada.estadoNuevo(),
+                codigo,
+                observacion,
+                Math.max(0, guardada.destinatarios().size() - 1),
+                enviados,
+                pendientes,
+                estadosActualizados);
     }
 
-    public void registrarRespuestaCpd(List<String> params, String remitenteEmail) throws SQLException {
-        if (params.size() < 5) {
+    public List<String[]> listarPendientes() throws SQLException {
+        return oficioDAO.listarSolicitudesPendientesCpd();
+    }
+
+    private String normalizarResultado(String valor) {
+        return switch (valor.trim().toUpperCase(Locale.ROOT)) {
+            case "HABILITADO", "HABILITADA" -> "HABILITADO";
+            case "OBSERVADO", "OBSERVADA", "OBSERVADA_CPD" -> "OBSERVADO";
+            case "RECHAZADO", "RECHAZADA", "RECHAZADA_CPD" -> "RECHAZADO";
+            default -> throw new IllegalArgumentException(
+                    "Resultado inválido. Use HABILITADO, OBSERVADO o RECHAZADO.");
+        };
+    }
+
+    private String estadoDe(String resultado) {
+        return switch (resultado) {
+            case "HABILITADO" -> "HABILITADA";
+            case "OBSERVADO" -> "OBSERVADA_CPD";
+            case "RECHAZADO" -> "RECHAZADA_CPD";
+            default -> throw new IllegalArgumentException("Resultado CPD no soportado.");
+        };
+    }
+
+    private int parsearId(String valor, String campo) {
+        try {
+            int id = Integer.parseInt(valor.trim());
+            if (id <= 0) {
+                throw new NumberFormatException("El ID debe ser positivo.");
+            }
+            return id;
+        } catch (NumberFormatException ex) {
             throw new IllegalArgumentException(
-                    "Formato: respuesta_cpd registrar id_oficio,id_solicitud,resultado(CONFIRMADA_CPD|HABILITADA|OBSERVADA_CPD|RECHAZADA_CPD),referencia_respaldo,observaciones,id_responsable_cpd?"
-            );
+                    campo + " debe ser un número entero positivo.", ex);
         }
-        int idOficio = Integer.parseInt(params.get(0).trim());
-        int idSol = Integer.parseInt(params.get(1).trim());
-        String resultado = params.get(2).trim().toUpperCase();
-        String respaldo = params.get(3).trim();
-        String obs = params.get(4).trim();
-        Integer idRespCpd = params.size() > 5 ? Integer.parseInt(params.get(5).trim()) : null;
-
-        String codResp = "R-CPD-2026-" + String.format("%04d", (int) (System.currentTimeMillis() % 10000));
-        Timestamp fechaHab = "HABILITADA".equalsIgnoreCase(resultado) ? new Timestamp(System.currentTimeMillis()) : null;
-
-        OficioRespuestaCpd resp = new OficioRespuestaCpd();
-        resp.setIdOficio(idOficio);
-        resp.setIdSolicitud(idSol);
-        resp.setCodigoRespuesta(codResp);
-        resp.setResultado(resultado);
-        resp.setObservaciones(obs);
-        resp.setReferenciaRespaldo(respaldo);
-        resp.setFechaHabilitacionEfectiva(fechaHab);
-        resp.setIdResponsableCpd(idRespCpd);
-        resp.setEstado("COMPLETADO");
-
-        respuestaDAO.create(resp);
-
-        // Actualizar solicitud
-        String nuevoEstado;
-        if ("HABILITADA".equalsIgnoreCase(resultado)) {
-            nuevoEstado = "HABILITADA";
-        } else if ("CONFIRMADA_CPD".equalsIgnoreCase(resultado)) {
-            nuevoEstado = "CONFIRMADA_CPD";
-        } else if ("OBSERVADA_CPD".equalsIgnoreCase(resultado)) {
-            nuevoEstado = "OBSERVADA_CPD";
-        } else {
-            nuevoEstado = "RECHAZADA_CPD";
-        }
-
-        solicitudDAO.updateEstado(idSol, nuevoEstado, idRespCpd, obs, "RECHAZADA_CPD".equals(resultado) ? obs : null);
-
-        // Historial (CU7)
-        HistorialSolicitud hist = new HistorialSolicitud();
-        hist.setIdSolicitud(idSol);
-        hist.setIdUsuario(idRespCpd);
-        hist.setEstadoAnterior("REMITIDA_A_CPD");
-        hist.setEstadoNuevo(nuevoEstado);
-        hist.setAccion("RESOLUCION_CPD");
-        hist.setObservacion("CPD registro resolución: " + resultado + ". Respaldo: " + respaldo);
-        historialDAO.create(hist);
-
-        // Notificación al estudiante y a Dirección (CU7)
-        Notificacion notif = new Notificacion();
-        notif.setIdSolicitud(idSol);
-        notif.setIdUsuario(idRespCpd);
-        notif.setDestinatario(remitenteEmail != null ? remitenteEmail : "estudiante@uagrm.edu.bo");
-        notif.setTipo("HABILITACION_CPD");
-        notif.setAsunto("Resolucion CPD - Solicitud ID " + idSol + ": " + nuevoEstado);
-        notif.setMensaje("El Centro de Procesamiento de Datos (CPD) ha registrado la siguiente resolución para su caso: " + nuevoEstado + ". Respaldo: " + respaldo);
-        notificacionDAO.create(notif);
     }
 
     public List<String[]> listarRespuestas() throws SQLException {
         return respuestaDAO.listAll();
     }
 
+    public List<String[]> listarOficiosRemitidos() throws SQLException {
+        return oficioDAO.listarOficiosRemitidos();
+    }
+
+    public List<File> obtenerArchivosDescargablesOficio(int idOficio)
+            throws SQLException {
+        String documento = oficioDAO.obtenerRutaDocumentoOficio(idOficio);
+        if (documento == null || documento.isBlank()) {
+            throw new IllegalArgumentException(
+                    "El oficio " + idOficio + " no tiene un documento adjunto.");
+        }
+
+        Path raizOficios = Paths.get(
+                System.getProperty("user.dir"), "oficios_cpd")
+                .toAbsolutePath().normalize();
+        Path raizSolicitudes = Paths.get(
+                System.getProperty("user.dir"), "archivos_solicitudes")
+                .toAbsolutePath().normalize();
+        List<File> archivos = new ArrayList<>();
+        archivos.add(validarArchivo(documento, raizOficios, "documento del oficio"));
+        for (String ruta : oficioDAO.listarRutasComprobantesOficio(idOficio)) {
+            archivos.add(validarArchivo(
+                    ruta, raizSolicitudes, "comprobante del oficio"));
+        }
+        return archivos;
+    }
+
+    public List<String[]> listarSolicitudesDeOficio(int idOficio)
+            throws SQLException {
+        List<String[]> solicitudes = oficioDAO.listarSolicitudesDeOficio(idOficio);
+        if (solicitudes.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No existe un oficio remitido a CPD con ID " + idOficio + ".");
+        }
+        return solicitudes;
+    }
+
     public String getComandosRespuesta() {
-        return "Comandos CU6 - Confirmación y Habilitación de CPD:\n" +
-                "- respuesta_cpd listar\n" +
-                "- respuesta_cpd registrar id_oficio,id_solicitud,resultado,referencia_respaldo,observaciones,id_responsable_cpd";
+        return "Comandos CU6 - Respuestas de CPD:\n" +
+                "- cpd pendientes (oficios y solicitudes remitidas que aún esperan respuesta)\n" +
+                "- cpd oficios (lista todos los oficios recibidos por CPD)\n" +
+                "- oficio_cpd consultar id_oficio (expediente y documentos del oficio)\n" +
+                "- cpd responder id_oficio,id_solicitud,HABILITADO|OBSERVADO|RECHAZADO," +
+                "codigo_respuesta,observacion\n" +
+                "- respuesta_cpd listar";
+    }
+
+    private File validarArchivo(
+            String ruta,
+            Path raizPermitida,
+            String descripcion
+    ) {
+        if (ruta == null || ruta.isBlank()) {
+            throw new IllegalArgumentException(
+                    "El " + descripcion + " no tiene una ruta registrada.");
+        }
+        Path archivo = Paths.get(ruta).toAbsolutePath().normalize();
+        if (!archivo.startsWith(raizPermitida)
+                || !Files.isRegularFile(archivo)
+                || !Files.isReadable(archivo)) {
+            throw new IllegalArgumentException(
+                    "No se puede descargar el " + descripcion + ": "
+                    + archivo + ".");
+        }
+        return archivo.toFile();
     }
 }
